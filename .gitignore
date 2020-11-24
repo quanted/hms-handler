@@ -131,3 +131,6 @@ dmypy.json
 # Misc options
 .idea
 .idea/
+
+*.sqlite
+*.sqlite3

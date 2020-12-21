@@ -134,3 +134,4 @@ dmypy.json
 
 .sqlite
 .sqlite3
+.csv

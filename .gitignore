@@ -132,6 +132,7 @@ dmypy.json
 .idea
 .idea/
 
-.sqlite
-.sqlite3
-.csv
+*.sqlite
+*.sqlite3
+*.csv
+*.png

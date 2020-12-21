@@ -27,6 +27,17 @@ class HMS:
         self.comid = None
         self.metadata = None
 
+    def print_info(self):
+        data = json.loads(self.data)
+        dates = list(data["data"].keys())
+        precip_source = self.geometry["geometryMetadata"]["precipSource"] if "geometryMetadata" in self.geometry.keys() else "NA"
+        l = len(data["data"])
+        print("COMID: {}, Source: {}, Precip Source: {}, Status: {}".format(self.comid, self.source, precip_source, self.task_status))
+        if l > 0:
+            print("Length: {}, Start-Date: {}, End-Date: {}".format(len(data["data"]), dates[0], dates[-1]))
+        else:
+            print("Length: {}, Start-Date: {}, End-Date: {}".format(0, "NA", "NA"))
+
     def set_geometry(self, gtype="point", value=None, metadata=None):
         if gtype == "point":
             self.geometry["point"] = value
@@ -91,22 +102,24 @@ class HMS:
                 success_fail = True
             elif self.task_status == "FAILURE":
                 success_fail = True
-                print("Failure: {}".format(response_json))
+                print("Failure: COMID: {}, {}".format(self.comid, response_json))
             else:
                 retry += 1
                 time.sleep(0.5 * retry)
+            # if retry < n_retries and not success_fail:
+                # print("Unable to complete data request, COMID: {}, message: {}".format(self.comid, response_json))
         if retry == n_retries:
             self.task_status = "FAILED: Retry timeout"
 
 
 if __name__ == "__main__":
     start_date = "01-01-2000"
-    end_date = "12-31-2017"
-    source = "nldas"
+    end_date = "12-31-2018"
+    source = "curvenumber"
     dataset = "surfacerunoff"
     module = "hydrology"
-    # cookies = {'sessionid': 'lmufmudjybph2r3ju0la15x5vuovz1pw'}
-    cookies = {'sessionid': 'b5c5ev7usauevf2nro7e8mothmekqsnj'}
+    cookies = {'sessionid': 'lmufmudjybph2r3ju0la15x5vuovz1pw'}
+    # cookies = {'sessionid': 'b5c5ev7usauevf2nro7e8mothmekqsnj'}
     t0 = time.time()
     hms = HMS(start_date=start_date,
               end_date=end_date,
@@ -114,11 +127,10 @@ if __name__ == "__main__":
               dataset=dataset,
               module=module,
               cookies=cookies)
-    geometry = 20867042
-    hms.set_geometry('comid', value=geometry)
+    geometry = 20735903
+    hms.set_geometry('comid', value=geometry, metadata={"precipSource": "gldas"})
     hms.submit_request()
+    hms.print_info()
     t1 = time.time()
-    print("Results")
-    print("Status: {}, Task ID: {}".format(hms.task_status, hms.task_id))
-    print("{}".format(hms.data))
+    test = json.loads(hms.data)
     print("Runtime: {} sec".format(round(t1-t0, 4)))

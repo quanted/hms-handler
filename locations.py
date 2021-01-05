@@ -77,16 +77,17 @@ class Region:
         self.gpearsons_y, self.gp_y = None, None
         self.n25, self.g25 = None, None
         self.n1, self.g1 = None, None
+        self.std, self.variance, self.mean = None, None, None
 
     def get_info(self):
         return [
             [
-                "nldas_pearsons", "nldas_monthly_pearsons", "nldas_yearly_pearsons", "nldas_n0_pearsons", "nldas_25p_pearsons",
-                "gldas_pearsons", "gldas_monthly_pearsons", "gldas_yearly_pearsons", "gldas_n0_pearsons", "gldas_25p_pearsons"
+                "nldas_pearsons", "nldas_monthly_pearsons", "nldas_yearly_pearsons", "nldas_n0_pearsons", "nldas_25p_pearsons", "nldas_mean", "nldas_std", "nldas_variance",
+                "gldas_pearsons", "gldas_monthly_pearsons", "gldas_yearly_pearsons", "gldas_n0_pearsons", "gldas_25p_pearsons", "gldas_mean", "gldas_std", "gldas_variance"
             ],
             [
-                self.pearsons, self.pearsons_m, self.pearsons_y, self.n1, self.n25,
-                self.gpearsons, self.gpearsons_m, self.gpearsons_y, self.g1, self.g25
+                self.pearsons, self.pearsons_m, self.pearsons_y, self.n1, self.n25, self.mean["nldas"], self.std["nldas"], self.variance["nldas"],
+                self.gpearsons, self.gpearsons_m, self.gpearsons_y, self.g1, self.g25, self.mean["gldas"], self.std["gldas"], self.variance["gldas"]
             ]
         ]
 
@@ -100,6 +101,8 @@ class Region:
         print("NLDAS Average 25 percentile Pearson's Coefficient: {}".format(self.n25))
         print("GLDAS Average Non-Zero Pearson's Coefficient: {}".format(self.g1))
         print("GLDAS Average 25 percentile Pearson's Coefficient: {}".format(self.g25))
+        print("NLDAS STD: {}, GLDAS STD: {}".format(self.std["nldas"], self.std["gldas"]))
+        print("NLDAS Variance: {}, GLDAS Variance: {}".format(self.variance["nldas"], self.variance["gldas"]))
 
         for c, d in self.catchments.items():
             print("------------ Catchment: {} ----------------".format(c))
@@ -228,6 +231,7 @@ class Region:
         self.dif_mean = pd.DataFrame(self.dif.mean(axis=1), columns=["dif_mean"])
         self.dif_mean.reset_index(inplace=True)
         self.dif_mean['date'] = pd.to_datetime(self.dif["date"])
+        self.calculate_stats()
 
     def plot_data(self, df, title):
         col = list(df.columns)
@@ -252,6 +256,30 @@ class Region:
         ax.set_title("{} - {} : {}".format(self.type, self.name, title))
         plt.show()
 
+    def calculate_stats(self):
+        n = []
+        g = []
+        for c, d in self.catchments.items():
+            if not np.isnan(d.pearsons):
+                n.append(d.pearsons)
+            if not np.isnan(d.gpearsons):
+                g.append(d.gpearsons)
+        n_std = np.std(n)
+        g_std = np.std(g)
+        n_var = np.var(n)
+        g_var = np.var(g)
+        self.std = {
+            "nldas": n_std,
+            "gldas": g_std
+        }
+        self.variance = {
+            "nldas": n_var,
+            "gldas": g_var
+        }
+        self.mean = {
+            "nldas": np.mean(n),
+            "gldas": np.mean(g)
+        }
 
 class Catchment:
     def __init__(self, comid, division, province, section=None):
@@ -392,10 +420,59 @@ class Catchment:
 if __name__ == "__main__":
 
     t0 = time.time()
-    # by_division = get_catchments(None, "division")
-    # by_province = get_catchments(None, "province")
+    by_division = get_catchments(None, "division")
+    by_province = get_catchments(None, "province")
     by_section = get_catchments(None, "section")
-    p_type = "section"
+
+    phsio = {
+        "section": by_section,
+        "province": by_province,
+        "division": by_division
+    }
+    for s, b in phsio.items():
+        n = len(b)
+        catchment_labels = []
+        catchments_data = []
+        section_labels = []
+        section_data = []
+        i = 1
+        for k, v in b.items():
+            r = Region(s, k)
+            r.set_catchments(b[k])
+            s_info = r.get_info()
+            for c, d in r.catchments.items():
+                info = d.get_info()
+                if type(k) == str:
+                    info[1].insert(0, v[0]["section"])
+                else:
+                    info[1].insert(0, "NA")
+                info[1].insert(0, v[0]["province"])
+                info[1].insert(0, v[0]["division"])
+                info[1].insert(0, c)
+                if len(catchment_labels) == 0:
+                    info[0].insert(0, "section")
+                    info[0].insert(0, "province")
+                    info[0].insert(0, 'division')
+                    info[0].insert(0, "comid")
+                    catchment_labels = info[0]
+                catchments_data.append(info[1])
+            s_info[1].insert(0, k)
+            s_info[1].insert(0, v[0]["province"])
+            s_info[1].insert(0, v[0]["division"])
+            if len(section_labels) == 0:
+                s_info[0].insert(0, "section")
+                s_info[0].insert(0, "province")
+                s_info[0].insert(0, 'division')
+                section_labels = s_info[0]
+            section_data.append(s_info[1])
+            print("section: {}/{}".format(i, n))
+            r.print_info()
+            i += 1
+        #write_csv("catchment-stats-data.csv", catchment_labels, catchments_data)
+        write_csv("{}-stats-data.csv".format(s), section_labels, section_data)
+        print("-----------------------------------\n-----------------------------------")
+    t1 = time.time()
+    print("Processing time: {} sec".format(round(t1-t0, 4)))
 
     # p_name = "WHITE MOUNTAIN"
     # r = Region(p_type, p_name)
@@ -411,48 +488,4 @@ if __name__ == "__main__":
     # division, province, section = "INTERMONTANE PLATEAUS", "BASIN AND RANGE", "SACRAMENTO"
     # catchment = Catchment(comid, division, province, section)
     # catchment.print_info()
-
-    n = len(by_section)
-    catchment_labels = []
-    catchments_data = []
-    section_labels = []
-    section_data = []
-    i = 1
-    for k, v in by_section.items():
-        r = Region(p_type, k)
-        r.set_catchments(by_section[k])
-        s_info = r.get_info()
-        for c, d in r.catchments.items():
-            info = d.get_info()
-            if type(k) == str:
-                info[1].insert(0, v[0]["section"])
-            else:
-                info[1].insert(0, "NA")
-            info[1].insert(0, v[0]["province"])
-            info[1].insert(0, v[0]["division"])
-            info[1].insert(0, c)
-            if len(catchment_labels) == 0:
-                info[0].insert(0, "section")
-                info[0].insert(0, "province")
-                info[0].insert(0, 'division')
-                info[0].insert(0, "comid")
-                catchment_labels = info[0]
-            catchments_data.append(info[1])
-        s_info[1].insert(0, k)
-        s_info[1].insert(0, v[0]["province"])
-        s_info[1].insert(0, v[0]["division"])
-        if len(section_labels) == 0:
-            s_info[0].insert(0, "section")
-            s_info[0].insert(0, "province")
-            s_info[0].insert(0, 'division')
-            section_labels = s_info[0]
-        section_data.append(s_info[1])
-        print("section: {}/{}".format(i, n))
-        r.print_info()
-        i += 1
-
-    write_csv("catchment-stats-data.csv", catchment_labels, catchments_data)
-    write_csv("section-stats-data.csv", section_labels, section_data)
-    t1 = time.time()
-    print("Processing time: {} sec".format(round(t1-t0, 4)))
 

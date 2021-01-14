@@ -5,6 +5,7 @@ import re
 import os
 import logging
 from statsmodels.api import OLS,add_constant
+import matplotlib.pyplot as plt
 
 class DataTool:
     def __init__(self):
@@ -28,8 +29,7 @@ class DataTool:
         print('pandas describe:',self.c_stats.describe())
     
     def plot_acc_compare(self):
-        try:self.model_result
-        except: self.run_acc_compare()
+        self.run_acc_compare()
         self.eco=gpd.read_file(self.physio_path)
         self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
         geog=self.modeldict['geog_covs'][0]
@@ -43,7 +43,13 @@ class DataTool:
         self.params=params
         
         self.param_gdf=self.eco_geog.join(params)
-        self.param_gdf.plot(column='coefficient')
+        
+        fig=plt.figure(dpi=300,figsize=[12,6])
+        fig.suptitle(f'modeldict:{self.modeldict}')
+        ax=fig.add_subplot(1,1,1)
+        #ax.set_title('top positive features')
+        self.param_gdf.plot(column='coefficient',ax=ax,cmap='brg',legend=True)
+        #ax.legend()
         
         """params=self.model_result.params.reset_index()
         params.columns=[geog,'coefficient']
@@ -54,8 +60,7 @@ class DataTool:
     def run_acc_compare(self,print_summary=False):
         #if regressiondict is None:
         #    regressiondict=self.modeldict['regressiondict']
-        if self.flat_c_stats_df is None:
-            self.set_flat_c_stats_df()
+        self.set_flat_c_stats_df()
         data_df=self.flat_c_stats_df
         data_df.dropna(inplace=True,axis=0)
         y_df=data_df.loc[:,'accuracy']

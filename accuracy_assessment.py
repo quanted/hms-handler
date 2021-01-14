@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import re
+import os
 import logging
 from statsmodels.api import OLS,add_constant
 
@@ -14,20 +15,42 @@ class DataTool:
             'data_sources':['nldas'], #'gldas'
             'accuracy_metrics':['pearsons'], #'pearsons'
             'exclusions':['monthly','yearly','none','25p'], # 'nonzero','monthly',''
-            'geog_covs':['province'], #geographic covariates
+            'geog_covs':['province'], #(a list with just 1) geographic covariates
         }
         self.geog_names=['division','province','section'] #descending size order
         self.expand_geog_names=False #True will append larger geogs names in hierarchy to smaller ones. e.g., to see which province a section is, etc.
+        self.physio_path='ecoregions/physio.dbf'
+        if not os.path.exists(self.physio_path):
+            print(f'cannot locate {self.physio_path}, the physiographic boundary shapefile. download it and unzip it in a folder called "ecoregions".')
         
     def describe_data(self):
         print('first 5 rows:', self.c_stats.head())
         print('pandas describe:',self.c_stats.describe())
     
     def plot_acc_compare(self):
-        try:self.model
+        try:self.model_result
         except: self.run_acc_compare()
-        self.eco=gpd.read_file('ecoregions/Data/eco_us.dbf')
-    
+        self.eco=gpd.read_file(self.physio_path)
+        self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
+        geog=self.modeldict['geog_covs'][0]
+        self.eco_geog=self.eco.dissolve(by=geog)
+        self.eco_geog.index=[idx.lower() for idx in self.eco_geog.index.to_list()]
+        
+        params=self.model_result.params
+        params.index=[f"{re.split('_',idx)[1].lower()}" for idx in params.index]
+        params.index.name=geog
+        params.name='coefficient'
+        self.params=params
+        
+        self.param_gdf=self.eco_geog.join(params)
+        self.param_gdf.plot(column='coefficient')
+        
+        """params=self.model_result.params.reset_index()
+        params.columns=[geog,'coefficient']
+        params.loc[:,'regressor']=params['regressor'].apply(lambda x:re.split('_',x)[1])
+        self.params=params
+        self.eco."""
+        
     def run_acc_compare(self,print_summary=False):
         #if regressiondict is None:
         #    regressiondict=self.modeldict['regressiondict']
@@ -133,7 +156,7 @@ class DataTool:
         sources=dict.fromkeys(self.modeldict['data_sources'])
         
         var_name_splits=[re.split('_',var) for var in var_names_to_filter]
-        for v_i,fil_name in enumerate(var_name_splits):
+        for v_i,var_name in enumerate(var_name_splits):
             if len(var_name)==2:
                 var_name_splits[v_i]=[var_name[0],'none',var_name[1]]
                 

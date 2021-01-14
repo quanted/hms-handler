@@ -23,6 +23,7 @@ class DataTool:
         self.physio_path='ecoregions/physio.dbf'
         if not os.path.exists(self.physio_path):
             print(f'cannot locate {self.physio_path}, the physiographic boundary shapefile. download it and unzip it in a folder called "ecoregions".')
+        self.states_path='geo_data/states/cb_2017_us_state_500k.dbf'
         
     def describe_data(self):
         print('first 5 rows:', self.c_stats.head())
@@ -47,8 +48,10 @@ class DataTool:
         fig=plt.figure(dpi=300,figsize=[12,6])
         fig.suptitle(f'modeldict:{self.modeldict}')
         ax=fig.add_subplot(1,1,1)
+        
         #ax.set_title('top positive features')
-        self.param_gdf.plot(column='coefficient',ax=ax,cmap='brg',legend=True)
+        self.param_gdf.plot(column='coefficient',ax=ax,cmap='plasma',legend=True)
+        self.add_states(ax)
         #ax.legend()
         
         """params=self.model_result.params.reset_index()
@@ -56,6 +59,16 @@ class DataTool:
         params.loc[:,'regressor']=params['regressor'].apply(lambda x:re.split('_',x)[1])
         self.params=params
         self.eco."""
+        
+    def add_states(self,ax):
+        try: self.conus_states
+        except:
+            states=gpd.read_file(self.states_path)
+            eco_d=self.eco.copy()
+            eco_d['dissolve_field']=1
+            eco_d.dissolve(by='dissolve_field')
+            self.conus_states=gpd.clip(states,eco_d)
+        self.conus_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='w')
         
     def run_acc_compare(self,print_summary=False):
         #if regressiondict is None:

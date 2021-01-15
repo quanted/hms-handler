@@ -114,7 +114,7 @@ class CatchmentCorrection(myLogger):
         mod_df=self.runoff_df.loc[:,sources['modeled']]
         if obs_df.shape[0]<100:
             self.logger.error(f'data problem for comid:{self.comid} obs_df.shape:{obs_df.shape} and mod_df.shape:{mod_df.shape}')
-            self.correction_dict={0
+            self.correction_dict={}
             self.uncorrected_test_stats=None
             return
         

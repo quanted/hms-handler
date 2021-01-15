@@ -27,7 +27,7 @@ class MpHelper(myLogger):
         myLogger.__init__(self,name='mphelper.log')
         
             
-    def runAsMultiProc(self,mp_object,args_list,kwargs_list={},):
+    def runAsMultiProc(self,mp_object,args_list,proc_count=4,kwargs_list={},):
         try:
             starttime=time()
             q=Queue()
@@ -35,19 +35,18 @@ class MpHelper(myLogger):
             if type(kwargs_list) is dict:
                 kwargs_list=[kwargs_list]*I
             #q_args_list=[[q,i,*args_list[i]] for i in range(I)]
-            proc_count=I
-            ilist=list(range(I))
+            i_todo_list=list(range(I))
             outlist=[None for _ in range(I)]
             procs={}
-            for _ in range(I):
+            for i in range(I):
                 process=MpWrapper(
                     q,i,mp_object,
                     pass_args=args_list[i],pass_kwargs=kwargs_list[i])
-                procs{i:process}
+                procs[i]=process
             for _ in range(proc_count):
-                i=ilist.pop()
+                i=i_todo_list.pop()
                 procs[i].start()
-            countdown=proc_count
+            countdown=I
         except:
             self.logger.exception('error in runasmultiproc')
             assert False,'unexpected error'
@@ -60,8 +59,8 @@ class MpHelper(myLogger):
                 outlist[i]=result
                 countdown-=1
                 procs[i].join()
-                if ilist:
-                   ii=ilist.pop()
+                if i_todo_list:
+                   ii=i_todo_list.pop()
                    procs[ii].start()
                 
                 
@@ -70,7 +69,7 @@ class MpHelper(myLogger):
                 #self.logger.exception('error')
                 if not q.empty(): self.logger.exception(f'error while checking q, but not empty')
                 else: sleep(1)
-        [proc.join() for proc in procs]
+        #[proc.join() for proc in procs]
         q.close()
         self.logger.info(f'all procs joined sucessfully')
         endtime=time()

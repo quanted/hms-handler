@@ -6,16 +6,213 @@ import os
 import logging
 from statsmodels.api import OLS,add_constant
 import matplotlib.pyplot as plt
+from random import shuffle
+import joblib
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LassoCV,LinearRegression
+from sklearn.preprocessing import StandardScaler
+from scipy.stats import pearsonr
+from multiprocessing import Process,Queue
+from mylogger import myLogger
+from data_analysis import get_comid_data
+from mp_helper import MpHelper
 
+class SeriesCompare:
+    def __init__(self,y,yhat):
+        self.err=y-yhat
+        sum_sq_err=np.sum(self.err**2)
+        self.mse=np.mean(sum_sq_err)
+        self.ymean=np.mean(y)
+        sum_sq_err_at_mean=np.sum((y-self.ymean)**2)
+        self.nse=1.0-(sum_sq_err/sum_sq_err_at_mean)
+        self.pearsons,self.perasons_pval=pearsonr(yhat,y)
+        
+       
+
+class PolyModel:
+    # a single polynomial model of the specified degree
+    def __init__(self,x,y,deg,regularize=None):
+        self.x=x;self.y=y
+        
+        self.deg=deg;self.regularize=regularize
+        
+        
+        X=self.make_poly_X(x)    
+        if regularize is None:
+            self.est=make_pipeline(StandardScaler,LinearRegression(fit_intercept=False))
+        elif regularize.lower() in ['l1','lasso']:
+            self.est=make_pipeline(StandardScaler,LassoCV(random_state=0,fit_intercept=False))
+        self.est.fit(X,y)
+        self.yhat_train=self.est.predict(X)
+            
+    def predict(self,x):
+        X=self.make_poly_X(x)
+        return self.est.predict(X)
+    
+    def set_test_stats(self,xtest,ytest):
+        self.yhat_test=self.predict(xtest)
+        self.poly_test_stats=SeriesCompare(ytest,self.yhat_test)
+        #dself.uncorrected_test_stats=SeriesCompare(ytest,xtest)
+    
+    def make_poly_X(self,x):
+        X=pd.DataFrame(np.ones(x.shape[0],1),columns=['constant'])
+        for d in range(1,self.deg+1):
+            X.loc[:,f'x^{d}']=x**d
+        return X
+            
+            
+            
+            
+                
+
+class CatchmentCorrection(myLogger):
+    def __init__(self,comid,modeldict):
+        myLogger.__init__(self,'catchment_correction.log')
+        self.comid=comid
+        self.runoff_df=get_comid_data(comid)
+        self.modeldict=modeldict
+        
+    def run(self):
+        self.runCorrection()
+        
+        
+    def set_train_test(self,y_df,x_df):
+        train_share=self.modeldict['train_share']
+        n=obs_df.shape[0]
+        split_idx=int(train_share*n)
+        x_train=x_df.loc[:split_idx]
+        y_train=y_df.loc[:split_idx]
+        x_test=x_df.loc[split_idx:]
+        y_test=y_df.loc[split_idx:]
+        return x_train,y_train,x_test,y_test
+    
+    def filter_data(self,y,x,data_filter):
+        if data_filter is None or data_filter.lower=="none":
+            return y,x
+        elif data_filter.lower()=='nonzero':
+            non_zero_idx=np.arange(y.shape[0])[x>0]
+            return y[non_zero_idx],x[non_zero_idx]
+                       
+                       
+    def runCorrection(self):
+        '''try:
+            self.load_result()
+            return
+        except:pass
+        '''
+        sources=self.modeldict['sources']
+        obs_df=self.runoff_df.loc[:,sources['observed']]
+        mod_df=self.runoff_df.loc[:sources['modeled']]
+        
+        data_filter=self.modeldict['filter']
+        obs_df,mod_df=self.filter_data(obs_df,mod_df,data_filter)
+        
+        x_train,y_train,x_test,y_test=self.set_train_test(obs_df,mod_df)
+        
+        regularizations=self.modeldict['regularize']
+        self.correction_dict={}
+        for regularization in regularizations:
+            for deg in range(1,self.modeldict['max_poly']+1):
+                model=PolyModel(x_train,y_train,deg,regularize=regularization)  
+                model.set_test_stats(x_test,y_test)
+                self.correction_dict[f'{d}_{regularization}']=model
+        
+        self.uncorrected_test_stats=SeriesCompare(x_test,y_test)
+        
+        #self.save_result(self.comid,self.modeldict)
+   
+    def load_result(comid,modeldict):
+        try:assert len(self.correction_dict)>0,'correction_dict is null'
+        except: print('no correction_dict')
+        
+        
+        
+        
+
+class RunoffCompare:
+    def __init__(self,):
+        self.modeldict={
+            'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
+            'filter':'none',#'nonzero'
+            'train_share':0.80,
+            'split_order':'chronological',#'random'
+            'max_poly_deg':5,
+            'regularize':[None,'lasso']# 'l1' or 'lasso', 'l2' or 'ridge'
+            
+        }
+        #self.logger=logging.getLogger(__name__)
+        self.comidlist=pd.read_csv('catchments-list-cleaned.csv')['comid'].to_list()
+        
+    
+    def runModelCorrection(self,):
+        args=[[comid,self.modeldict] for comid in self.comidlist[0:3]]
+        save_hash=joblib.hash(args)
+        save_path=f'comid_correction_list_hash-{save_hash}'
+        assert not os.path.exists(save_path),f'save_path:{save_path} already exists, halting'                            
+        comid_obj_list=MpHelper().runAsMultiProc(CatchmentCorrection,args)
+        self.comid_obj_list=comid_obj_list
+        
+        with open(save_path,'wb') as f:
+            pickle.dump(comid_obj_list,f)
+    """
+    def build_comidlist_runoff_df(self):
+        try:
+            self.bigdf=pd.read_pickle('bigdf.pkl')
+            print('dataframe has been loaded from disk')
+            return
+        except:
+            print(f'building the dataframe')
+        comid_dflist=[get_comid_data(comid) for comid in self.comidlist]
+        self.comid_dflist=comid_dflist
+        bigdf=pd.concat(comid_dflist,keys=self.comidlist)
+        indexlist=bigdf.index.to_list()
+        row_count=len(indexlist)
+        tup_list=[(indexlist[i][0],bigdf.loc[:,'date'].iloc[i]) for i in range(row_count)]
+        new_m_idx=pd.MultiIndex.from_tuples(tup_list,names=['comid','date'])
+        bigdf.index=new_m_idx
+        bigdf.drop(label='date',axis=1,inplace=True)
+        self.bigdf=bigdf
+        bigdf.to_pickle('bigdf.pkl')
+        
+    def build_train_test_big_df(self,):
+        try: self.bigdf
+        except: self.build_comidlist_runoff_df()
+        split_order=self.modeldict['split_order']
+        train_share=self.modeldict['train_share']
+        datelist=self.bigdf.index.unique(level='date').sort_values()
+        if split_order=='random':
+            shuffle(datelist)
+        date_count=len(datelist)
+        split_idx=int(date_count*train_share)
+        train_dates=datelist[:split_idx]
+        test_dates=datelist[split_idx:]
+        self.bigdf_train=self.bigdf.loc[(slice(None),train_dates),:]
+        self.bigdf_test=self.bigdf.loc[(slice(None),test_dates),:]
+        
+    def runCorrectionModeler(self):
+        try: self.bigdf_train,self.bigdf_test
+        except: self.build_train_test_big_df()"""
+        
+        
+        
+        
+
+    
+    
+        
+        
+        
+        
+        
 class DataTool:
     def __init__(self):
-        self.logger=logging.getLogger(__name__)
+        #self.logger=logging.getLogger(__name__)
         self.c_stats=pd.read_csv('catchment-stats-data.csv')
         self.flat_c_stats_df=None
         self.modeldict={
             'data_sources':['nldas'], #'gldas'
             'accuracy_metrics':['pearsons'], #'pearsons'
-            'exclusions':['monthly','yearly','none','25p'], # 'nonzero','monthly',''
+            'exclusions':['monthly','yearly','nonzero','25p'], # 'nonzero','monthly',''
             'geog_covs':['province'], #(a list with just 1) geographic covariates
         }
         self.geog_names=['division','province','section'] #descending size order
@@ -34,8 +231,8 @@ class DataTool:
         self.eco=gpd.read_file(self.physio_path)
         self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
         geog=self.modeldict['geog_covs'][0]
-        self.eco_geog=self.eco.dissolve(by=geog)
-        self.eco_geog.index=[idx.lower() for idx in self.eco_geog.index.to_list()]
+        eco_geog=self.eco.dissolve(by=geog)
+        eco_geog.index=[idx.lower() for idx in eco_geog.index.to_list()]
         
         params=self.model_result.params
         params.index=[f"{re.split('_',idx)[1].lower()}" for idx in params.index]
@@ -43,14 +240,15 @@ class DataTool:
         params.name='coefficient'
         self.params=params
         
-        self.param_gdf=self.eco_geog.join(params)
+        self.param_gdf=eco_geog.join(params)
         
         fig=plt.figure(dpi=300,figsize=[12,6])
         fig.suptitle(f'modeldict:{self.modeldict}')
         ax=fig.add_subplot(1,1,1)
         
         #ax.set_title('top positive features')
-        self.param_gdf.plot(column='coefficient',ax=ax,cmap='plasma',legend=True)
+        self.param_gdf.plot(column='coefficient',ax=ax,cmap='plasma',legend=True,)
+        #self.param_gdf.boundary.plot(ax=ax,edgecolor='w',linewidth=1)
         self.add_states(ax)
         #ax.legend()
         
@@ -61,14 +259,14 @@ class DataTool:
         self.eco."""
         
     def add_states(self,ax):
-        try: self.conus_states
+        try: self.eco_clip_states
         except:
             states=gpd.read_file(self.states_path)
             eco_d=self.eco.copy()
             eco_d['dissolve_field']=1
             eco_d.dissolve(by='dissolve_field')
-            self.conus_states=gpd.clip(states,eco_d)
-        self.conus_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='w')
+            self.eco_clip_states=gpd.clip(states,eco_d)
+        self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='w')
         
     def run_acc_compare(self,print_summary=False):
         #if regressiondict is None:

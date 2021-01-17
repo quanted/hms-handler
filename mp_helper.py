@@ -25,6 +25,8 @@ class MpWrapper(Process,myLogger):
 class MpHelper(myLogger):   
     def __init__(self):
         myLogger.__init__(self,name='mphelper.log')
+        q=Queue()
+        q.close()
         
             
     def runAsMultiProc(self,mp_object,args_list,proc_count=4,kwargs_list={},):
@@ -36,15 +38,13 @@ class MpHelper(myLogger):
                 kwargs_list=[kwargs_list]*I
             #q_args_list=[[q,i,*args_list[i]] for i in range(I)]
             i_todo_list=list(range(I))
-            outlist=[None for _ in range(I)]
-            procs={}
-            for i in range(I):
-                process=MpWrapper(
+            outlist=['empty' for _ in range(I)]
+            procs=[None for _ in range(I)]
+            for _ in range(proc_count):
+                i=i_todo_list.pop(-1)
+                procs[i]=MpWrapper(
                     q,i,mp_object,
                     pass_args=args_list[i],pass_kwargs=kwargs_list[i])
-                procs[i]=process
-            for _ in range(proc_count):
-                i=i_todo_list.pop()
                 procs[i].start()
             countdown=I
         except:
@@ -54,21 +54,29 @@ class MpHelper(myLogger):
             try:
                 
                 self.logger.info(f'multiproc checking q. countdown:{countdown}')
-                i,result=q.get(True,20)
+                try:
+                    i,result=q.get(True,20)
+                except:
+                    if not q.empty():
+                        self.logger.exception(f'q not empty, but error encountered ')
+                    continue
                 self.logger.info(f'multiproc has something from the q!')
                 outlist[i]=result
                 countdown-=1
                 procs[i].join()
-                if i_todo_list:
-                   ii=i_todo_list.pop()
-                   procs[ii].start()
+                if i_todo_list: #start the next process
+                    ii=i_todo_list.pop(-1)
+                    procs[ii]=MpWrapper(
+                        q,ii,mp_object,
+                        pass_args=args_list[ii],pass_kwargs=kwargs_list[ii])
+                    procs[ii].start()
                 
                 
                 self.logger.info(f'proc completed. countdown:{countdown}')
             except:
                 #self.logger.exception('error')
-                if not q.empty(): self.logger.exception(f'error while checking q, but not empty')
-                else: sleep(1)
+                self.logger.exception('unexpected error')
+                assert False, 'halt'
         #[proc.join() for proc in procs]
         q.close()
         self.logger.info(f'all procs joined sucessfully')

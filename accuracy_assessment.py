@@ -18,131 +18,6 @@ from mylogger import myLogger
 from data_analysis import get_comid_data
 from mp_helper import MpHelper
 
-class SeriesCompare:
-    def __init__(self,y,yhat):
-        self.err=y-yhat
-        sum_sq_err=np.sum(self.err**2)
-        self.mse=np.mean(sum_sq_err)
-        self.ymean=np.mean(y)
-        sum_sq_err_at_mean=np.sum((y-self.ymean)**2)
-        self.nse=1.0-(sum_sq_err/sum_sq_err_at_mean)
-        self.pearsons,self.pearsons_pval=pearsonr(yhat,y)
-        
-       
-
-class PolyModel:
-    # a single polynomial model of the specified degree
-    def __init__(self,x,y,deg,regularize=None):
-        self.deg=deg;self.regularize=regularize
-        X=self.make_poly_X(x)    
-        if regularize is None:
-            self.est=make_pipeline(StandardScaler(),LinearRegression(fit_intercept=False))
-        elif regularize.lower() in ['l1','lasso']:
-            self.est=make_pipeline(StandardScaler(),LassoCV(random_state=0,fit_intercept=False))
-        else:
-            assert False,'regularization not recognized'
-        self.est.fit(X,y)
-        self.yhat_train=self.est.predict(X)
-            
-    def predict(self,x):
-        X=self.make_poly_X(x)
-        return self.est.predict(X)
-    
-    def set_test_stats(self,xtest,ytest):
-        self.yhat_test=self.predict(xtest)
-        self.poly_test_stats=SeriesCompare(ytest,self.yhat_test)
-        #dself.uncorrected_test_stats=SeriesCompare(ytest,xtest)
-    
-    def make_poly_X(self,x):
-        X=pd.DataFrame(np.ones(x.shape[0]),columns=['constant'])
-        for d in range(1,self.deg+1):
-            X.loc[:,f'x^{d}']=x.values**d
-        return X
-            
-            
-            
-            
-                
-
-class CatchmentCorrection(myLogger):
-    def __init__(self,comid,modeldict):
-        myLogger.__init__(self,'catchment_correction.log')
-        self.comid=comid
-        self.runoff_df=self.make_runoff_df(comid)
-        self.modeldict=modeldict
-        
-    def make_runoff_df(self,comid):
-        df=get_comid_data(comid)
-        date=df['date']
-        df.index=date
-        df.drop(columns='date',inplace=True)
-        return df
-    
-    def run(self):
-        self.runCorrection()
-        
-        
-    def set_train_test(self,y_df,x_df):
-        train_share=self.modeldict['train_share']
-        n=y_df.shape[0]
-        split_idx=int(train_share*n)
-        x_train=x_df.iloc[:split_idx]
-        y_train=y_df.iloc[:split_idx]
-        x_test=x_df.iloc[split_idx:]
-        y_test=y_df.iloc[split_idx:]
-        return x_train,y_train,x_test,y_test
-    
-    def filter_data(self,y,x,data_filter):
-        if data_filter is None or data_filter.lower()=="none":
-            return y,x
-        if data_filter.lower()=='nonzero':
-            non_zero_idx=np.arange(y.shape[0])[x>0]
-            y=y[non_zero_idx],x=x[non_zero_idx]
-        if data_filter.lower()[:10]=='percentile':
-            assert False, not developed
-        return y,x
-                       
-                       
-    def runCorrection(self):
-        '''try:
-            self.load_result()
-            return
-        except:pass
-        '''
-        sources=self.modeldict['sources']
-        obs_df=self.runoff_df.loc[:,sources['observed']]
-        mod_df=self.runoff_df.loc[:,sources['modeled']]
-        if obs_df.shape[0]<100:
-            self.logger.error(f'data problem for comid:{self.comid} obs_df.shape:{obs_df.shape} and mod_df.shape:{mod_df.shape}')
-            self.correction_dict={}
-            self.uncorrected_test_stats=None
-            return
-        
-        data_filter=self.modeldict['filter']
-        obs_df,mod_df=self.filter_data(obs_df,mod_df,data_filter)
-        
-        x_train,y_train,x_test,y_test=self.set_train_test(obs_df,mod_df)
-        
-        regularizations=self.modeldict['regularize']
-        self.correction_dict={}
-        for regularization in regularizations:
-            for deg in range(1,self.modeldict['max_poly_deg']+1):
-                model=PolyModel(x_train,y_train,deg,regularize=regularization)  
-                model.set_test_stats(x_test,y_test)
-                self.correction_dict[f'{deg}_{regularization}']=model
-        
-        self.uncorrected_test_stats=SeriesCompare(x_test,y_test)
-        
-        #self.save_result(self.comid,self.modeldict)
-   
-    def load_result(comid,modeldict):
-        try:assert len(self.correction_dict)>0,'correction_dict is null'
-        except: print('no correction_dict')
-        
-        
-        
-        
-
 class RunoffCompare:
     def __init__(self,):
         self.proc_count=8
@@ -159,19 +34,7 @@ class RunoffCompare:
         }
         #self.logger=logging.getLogger(__name__)
         self.comidlist=pd.read_csv('catchments-list-cleaned.csv')['comid'].to_list()
-        
     
-    def runModelCorrection(self,):
-        args=[[comid,self.modeldict] for comid in self.comidlist]
-        save_hash=joblib.hash(args)
-        save_path=os.path.join('results',f'comid_correction_list_hash-{save_hash}')
-        assert not os.path.exists(save_path),f'save_path:{save_path} already exists, halting'                            
-        comid_obj_list=MpHelper().runAsMultiProc(CatchmentCorrection,args,proc_count=self.proc_count)
-        self.comid_obj_list=comid_obj_list
-        
-        with open(save_path,'wb') as f:
-            pickle.dump(comid_obj_list,f)
-    """
     def build_comidlist_runoff_df(self):
         try:
             self.bigdf=pd.read_pickle('bigdf.pkl')
@@ -208,7 +71,7 @@ class RunoffCompare:
         
     def runCorrectionModeler(self):
         try: self.bigdf_train,self.bigdf_test
-        except: self.build_train_test_big_df()"""
+        except: self.build_train_test_big_df()
         
         
         
@@ -400,8 +263,5 @@ class DataTool:
         return [var_names_to_filter[i] for i in keep_idx]
     
     
-        
-if __name__=="__main__":
-    rc=RunoffCompare()
-    rc.runModelCorrection()
+
                                   

@@ -261,7 +261,7 @@ class CompareCorrect(myLogger):
             
             ax=fig.add_subplot(1,1,1)
 
-            ax.set_title(f'{col}')
+            ax.set_title(f'{model_name}_{col}')
             pos_eco_geog_data=eco_geog_data[eco_geog_data.loc[:,col]>0]
             pos_eco_geog_data.plot(column=col,ax=ax,cmap='plasma',legend=True,)
             #self.param_gdf.boundary.plot(ax=ax,edgecolor='w',linewidth=1)

@@ -28,8 +28,8 @@ class RunoffCompare:
             'filter':'none',#'nonzero'
             'train_share':0.80,
             'split_order':'chronological',#'random'
-            'max_poly_deg':5,
-            'regularize':[None,'lasso']# 'l1' or 'lasso', 'l2' or 'ridge'
+            'max_poly_deg':6,
+            'regularize':['lasso']#[None,'lasso']# 'l1' or 'lasso', 'l2' or 'ridge'
             
         }
         #self.logger=logging.getLogger(__name__)
@@ -106,7 +106,7 @@ class DataTool:
         print('first 5 rows:', self.c_stats.head())
         print('pandas describe:',self.c_stats.describe())
     
-    def plot_acc_compare(self):
+    def plot_acc_compare(self,):
         self.run_acc_compare()
         self.eco=gpd.read_file(self.physio_path)
         self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
@@ -148,11 +148,12 @@ class DataTool:
             self.eco_clip_states=gpd.clip(states,eco_d)
         self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='w')
         
-    def run_acc_compare(self,print_summary=False):
+    def run_acc_compare(self,print_summary=False,data_df=None):
         #if regressiondict is None:
         #    regressiondict=self.modeldict['regressiondict']
-        self.set_flat_c_stats_df()
-        data_df=self.flat_c_stats_df
+        if data_df is None:
+            self.set_flat_c_stats_df()
+            data_df=self.flat_c_stats_df
         data_df.dropna(inplace=True,axis=0)
         y_df=data_df.loc[:,'accuracy']
         X_df=data_df.drop(labels='accuracy',axis=1,inplace=False)
@@ -189,7 +190,7 @@ class DataTool:
                     df.drop(labels=col,axis=1,inplace=True)
         return df
                     
-        
+       
         
     
     def set_flat_c_stats_df(self):

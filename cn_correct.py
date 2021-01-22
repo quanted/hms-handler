@@ -40,7 +40,8 @@ class PolyModel(myLogger):
         myLogger.__init__(self,'polymodel.log')
         self.deg=deg;self.model_name=model_name
         X=self.make_poly_X(x)   
-        poly_kwargs={'include_bias':False}
+        poly_kwargs={'include_bias':False} #constant added by regression 
+        #    instead so lassoCV knows it's distinct from other variables
         param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
         cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=5)
         if model_name.lower() =='lin-reg':

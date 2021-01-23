@@ -458,7 +458,7 @@ class CompareCorrect(myLogger):
                 if geog in self.geog_names: 
                     g_name=self.comid_physio.loc[comid,geog]
                     if pd.isnull(g_name):
-                        self.geog_names[self.geog_names.index(geog)-1]
+                        bigger_geog=self.geog_names[self.geog_names.index(geog)-1]
                         g_name=self.comid_physio.loc[comid,bigger_geog]
                     comid_geog_dict[comid][geog]=g_name
                 elif type(geog) is str and geog=='streamcat':

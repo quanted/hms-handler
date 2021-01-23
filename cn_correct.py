@@ -401,12 +401,12 @@ class CompareCorrect(myLogger):
                 'lin-reg':{'max_poly_deg':2,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
                 'lasso':{'max_poly_deg':3,'fit_intercept':False},
-                'gbr':{'kwargs':{
+                'gbr':{'kwargs':{}
                     #'n_estimators':10000,
                     #'subsample':1,
                     #'max_depth':3}}
                 }
-        }
+            }
         #self.logger=logging.getLogger(__name__)
         clist_df=pd.read_csv('catchments-list-cleaned.csv')
         self.comid_physio=clist_df.drop('comid',axis=1,inplace=False)

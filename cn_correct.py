@@ -414,7 +414,7 @@ class CompareCorrect(myLogger):
         self.comid_physio=clist_df.drop('comid',axis=1,inplace=False)
         self.comid_physio.index=clist_df.loc[:,'comid']
         raw_comidlist=clist_df['comid'].to_list()
-        self.comidlist=[key for key,val in Counter(raw_comidlist).items() if val==1][0:10]
+        self.comidlist=[key for key,val in Counter(raw_comidlist).items() if val==1]
         
         #keep order, but remove duplicates
         

@@ -76,8 +76,10 @@ class RunPipeline:
             modeled_runoff=x.loc[:,self.modeled_runoff_col]
             zero_idx=modeled_runoff==0
             yhat_df[zero_idx]=self.model['zero'].predict(x[zero_idx])[:,None]
-            nonzero_yhat=self.model['nonzero'].predict(x[~zero_idx])
-            yhat_df[~zero_idx]=nonzero_yhat[:,None]
+            x_nonzero=x[~zero_idx]
+            if x_nonzero.shape[0]>0:
+                nonzero_yhat=self.model['nonzero'].predict(x_nonzero)
+                yhat_df[~zero_idx]=nonzero_yhat[:,None]
             return yhat_df
         
     def get_prediction_and_stats(self,xtest,ytest):
@@ -191,8 +193,8 @@ class CatchmentCorrection(myLogger):
         sources=self.modeldict['sources']
         obs_df=self.runoff_df.loc[:,sources['observed']]
         mod_df=self.runoff_df.loc[:,sources['modeled']]
-        if obs_df.shape[0]<100:
-            self.logger.error(f'data problem for comid:{self.comid} obs_df.shape:{obs_df.shape} and mod_df.shape:{mod_df.shape}')
+        if mod_df[mod_df>0].shape[0]<100:
+            self.logger.error(f'data problem for comid:{self.comid} mod_df[mod_df>0].shape[0]:{mod_df[mod_df>0].shape[0]} and mod_df.shape:{mod_df.shape}')
             self.correction_dict={}
             self.uncorrected_test_stats=None
             return
@@ -229,6 +231,8 @@ class ComidData(myLogger):
         obs_src=sources['observed']
         mod_src=sources['modeled']
         self.runoff_model_data_df=self.runoff_df.loc[:,[obs_src,mod_src]]
+        nonzero=self.runoff_model_data_df.loc[:,mod_src]>0
+        self.nonzero_count=nonzero.shape[0] 
         self.test_results={} # will contain {m_name:{test_stats:...,yhat_test:...}}
         
         #data_filter=self.modeldict['filter']
@@ -267,6 +271,9 @@ class DataCollection(myLogger):
         self.comidlist=comidlist
         self.modeldict=modeldict
         self.comid_geog_dict=comid_geog_dict
+        self.geog_names=['division','province','section']
+        self.physio_path='ecoregions/physio.dbf'
+        self.states_path='geo_data/states/cb_2017_us_state_500k.dbf'
         self.failed_comid_dict={}
         self.onehot=OneHotEncoder(sparse=False)
         
@@ -289,7 +296,7 @@ class DataCollection(myLogger):
             
         for comid in self.comidlist:
             comid_data_obj=ComidData(comid,self.modeldict['sources'])
-            if comid_data_obj.runoff_model_data_df.shape[0]>100:
+            if comid_data_obj.nonzero_count>100:
                 self.comid_data_object_dict[comid]=comid_data_obj
             else:
                 self.failed_comid_dict[comid]=f'runoff_model_data_df too small with shape:{comid_data_obj.runoff_model_data_df.shape}'
@@ -333,7 +340,7 @@ class DataCollection(myLogger):
         for obj in self.comid_modeling_objects:
             obj.x_test_float=self.makeDummies(obj.x_test,fit=False)
     
-    def runModel(self):
+    def runModel(self): #singular!
         X=self.big_x_train
         y=self.big_y_train
         self.model_results={}
@@ -365,7 +372,56 @@ class DataCollection(myLogger):
             for obj in self.comid_modeling_objects:
                 yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
                 obj.test_results[m_name]={'test_stats':test_stats,'yhat_test':yhat_test}
-    
+        for obj in self.comid_modeling_objects:
+            uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
+            obj.test_results['uncorrected']={'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),'yhat_test':uncorr_yhat}
+            
+    def plotGeoTestData(self):
+        geog=self.modeldict['model_geog']
+        bigger_geog=self.geog_names[self.geog_names.index(geog)-1]
+        try: self.eco
+        except:
+            self.eco=gpd.read_file(self.physio_path)
+            self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
+            null_bool=self.eco.loc[:,geog].isnull()#fix missing sections
+            self.eco[null_bool].loc[:,geog]=self.eco[null_bool].loc[:,bigger_geog]
+            eco_geog=self.eco.dissolve(by=geog)
+            self.eco_geog=eco_geog
+        self.acc_df_dict={};self.geog_acc_df_dict={}  
+        for m_name in self.model_results.keys():
+            data_dict={'nse':[],'pearson':[],geog:[]}
+            for obj in self.comid_modeling_objects:
+                data_dict['nse'].append(obj.test_results[m_name]['test_stats'].nse)
+                data_dict['pearson'].append(obj.test_results[m_name]['test_stats'].nse)
+                data_dict[geog].append(self.comid_geog_dict[obj.comid][geog])
+            mean_acc_df=pd.DataFrame(data_dict).groupby(geog).mean()
+            #self.acc_df_dict[m_name]=mean_acc_df
+            geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
+            #self.geog_acc_df_dict[m_name]=
+            for metric in ['nse','pearson']:
+                fig=plt.figure(dpi=300,figsize=[9,6])
+                fig.suptitle(f'modeldict:{self.modeldict}')
+                ax=fig.add_subplot(1,1,1)
+                ax.set_title(f'{m_name}_{metric}')
+                pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
+                pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
+                self.add_states(ax)
+                fig.savefig(f'results/accuracy_{m_name}_{metric}.png')
+        
+            
+    def add_states(self,ax):
+        try: self.eco_clip_states
+        except:
+            states=gpd.read_file(self.states_path)
+            eco_d=self.eco.copy()
+            eco_d['dissolve_field']=1
+            eco_d.dissolve(by='dissolve_field')
+            self.eco_clip_states=gpd.clip(states,eco_d)
+        self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='k')                 
+            
+        
+                
+                
     def makeDummies(self,df,fit=False):
         if fit:
             self.obj_cols=[]
@@ -414,7 +470,7 @@ class CompareCorrect(myLogger):
         self.comid_physio=clist_df.drop('comid',axis=1,inplace=False)
         self.comid_physio.index=clist_df.loc[:,'comid']
         raw_comidlist=clist_df['comid'].to_list()
-        self.comidlist=[key for key,val in Counter(raw_comidlist).items() if val==1]
+        self.comidlist=[key for key,val in Counter(raw_comidlist).items() if val==1]#[0:20]
         
         #keep order, but remove duplicates
         
@@ -430,19 +486,21 @@ class CompareCorrect(myLogger):
         args=[[comid,self.modeldict] for comid in self.comidlist]
         save_hash=joblib.hash(args)
         save_path=os.path.join('results',f'data-collection_{save_hash}')
+        loaded=False
         if os.path.exists(save_path):
             with open(save_path,'rb') as f:
                 self.dc=pickle.load(f)
-            return
+            loaded=True
         else:
             print('running big model')
-        
-        self.dc=DataCollection(self.comidlist,self.modeldict,self.makeComidGeogDict())
-        self.dc.build()
-        self.dc.runModel()
-        self.dc.runTestData()
-        with open(save_path,'wb') as f:
-            pickle.dump(self.dc,f)
+        if not loaded:
+            self.dc=DataCollection(self.comidlist,self.modeldict,self.makeComidGeogDict())
+            self.dc.build()
+            self.dc.runModel()
+            self.dc.runTestData()
+            with open(save_path,'wb') as f:
+                pickle.dump(self.dc,f)
+        self.dc.plotGeoTestData()
         
     def makeComidGeogDict(self):
         geog=self.modeldict['model_geog']

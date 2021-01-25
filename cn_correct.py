@@ -19,7 +19,7 @@ from scipy.stats import pearsonr
 from multiprocessing import Process,Queue
 from mylogger import myLogger
 from data_analysis import get_comid_data
-from mp_helper import MpHelper
+from mp_helper import MpHelper,MpWrapper
 from collections import Counter
 from time import time
 
@@ -35,7 +35,21 @@ class SeriesCompare:
         sum_sq_err_at_mean=np.sum((y-self.ymean)**2)
         self.nse=1.0-(sum_sq_err/sum_sq_err_at_mean)
         self.pearsons,self.pearsons_pval=pearsonr(yhat,y)
-        
+ 
+
+
+class ToFortranOrder(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
+    def fit(self,X,y=None):
+        pass
+    def transform(self,X):
+        if type(X) is pd.DataFrame or type(X) is pd.Series:
+            return X.to_numpy().asfortranarray(dtype=np.float32)
+        else:
+            return X.asfortranarray()
+    
+
 class DropConst(BaseEstimator,TransformerMixin):
     def __init__(self):
         self.logger=logging.getLogger()
@@ -54,20 +68,38 @@ class DropConst(BaseEstimator,TransformerMixin):
             return X[:,self.unique_>1]       
 
 class RunPipeline:
-    def __init__(self,x,y,model_spec_tup):
+    def __init__(self,data_dict,model_spec_tup):
         self.model_spec_tup=model_spec_tup
+        if self.model_spec_tup[2]['cross_validate']:
+            self.runCrossValidate(data_dict)
+        else:
+            self.runSingleModel(data_dict)
+    
+    def runCrossValidate(self,data_dict):
+        cv_dict=self.model_spec_tup[2]['cross_validate']
+        n_reps=cv_dict['n_reps']
+        #data_dict.....
+            
+    
+    
+        
+    def runSingleModel(self,data_dict):
+        x=data_dict['x']
+        y=data_dict['y']
         myLogger.__init__(self,'runpipeline.log')
-        self.modeled_runoff_col=model_spec_tup[2]['sources']['modeled']
-        self.data_filter=model_spec_tup[2]['filter']
+        self.modeled_runoff_col=self.model_spec_tup[2]['sources']['modeled']
+        self.data_filter=self.model_spec_tup[2]['filter']
         if self.data_filter == 'none':
-            self.model=PipelineModel(x,y,model_spec_tup)
+            self.model=PipelineModel(data_dict,self.model_spec_tup)
         elif self.data_filter == 'nonzero':
             modeled_runoff=x.loc[:,self.modeled_runoff_col]
             zero_idx=modeled_runoff==0
             self.model={}
-            self.model['zero']=PipelineModel(x[zero_idx],y[zero_idx],('lin-reg',{'max_poly_deg':1,'fit_intercept':1},None))
+            self.model['zero']=PipelineModel(x[zero_idx],y[zero_idx],('lin-reg',{'max_poly_deg':1,'fit_intercept':False},None))
             self.model['nonzero']=PipelineModel(x[~zero_idx],y[~zero_idx],self.model_spec_tup)
         else:assert False,f'self.data_filter:{self.data_filter} not developed'
+            
+            
     def predict(self,x):
         if self.data_filter == 'none':
             return pd.DataFrame(self.model.predict(x),columns=[self.modeled_runoff_col],index=x.index)
@@ -102,6 +134,7 @@ class PipelineModel(myLogger):
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
             self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=6)
+            self.pipe.fit(x,y)
         elif model_name.lower() in ['l1','lasso']:
             deg=specs['max_poly_deg']
             lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv)
@@ -109,16 +142,20 @@ class PipelineModel(myLogger):
                 StandardScaler(),
                 PolynomialFeatures(include_bias=False,degree=deg),
                 DropConst(),
+                ToFortranOrder(),
                 LassoCV(**lasso_kwargs,n_jobs=6))
+            self.pipe.fit(x,y.astype(np.float32))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
             else:kwargs={}
             self.pipe=GradientBoostingRegressor(random_state=0,**kwargs)
+            self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
-        self.pipe.fit(x,y)
+        self.logger.info(f'fit complete, starting yhat_train prediction')
         self.yhat_train=pd.DataFrame(self.pipe.predict(x),index=x.index,columns=['yhat'])
+        self.logger.info(f'yhat_train prediction complete.')
             
     def predict(self,x):
         return self.pipe.predict(x)
@@ -348,7 +385,8 @@ class DataCollection(myLogger):
         for m_name,specs in self.modeldict['model_specs'].items():
             self.logger.info(f'starting {m_name}')
             t0=time()
-            args=[X,y,(m_name,specs,self.modeldict)]
+            data_dict={'x':X,'y':y}
+            args=[data_dict,(m_name,specs,self.modeldict)]
             name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
             if os.path.exists(name):
                 try:
@@ -447,6 +485,7 @@ class CompareCorrect(myLogger):
         if not os.path.exists('results'):
             os.mkdir('results')
         self.modeldict={
+            'cross_validate':False,
             'model_geog':'section',
             'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
             'filter':'nonzero',#'none',#'nonzero'
@@ -454,15 +493,15 @@ class CompareCorrect(myLogger):
             'split_order':'chronological',#'random'
             'model_scale':'conus',#'comid'
             'model_specs':{
-                'lin-reg':{'max_poly_deg':2,'fit_intercept':False}, 
+                #'lin-reg':{'max_poly_deg':2,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
                 'lasso':{'max_poly_deg':3,'fit_intercept':False},
-                'gbr':{
-                    'kwargs':{}
+                #'gbr':{
+                #    'kwargs':{}
                     #'n_estimators':10000,
                     #'subsample':1,
-                    #'max_depth':3}}
-                }
+                    #'max_depth':3
+                #}
             }
         }
         #self.logger=logging.getLogger(__name__)

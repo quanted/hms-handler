@@ -47,7 +47,7 @@ class ToFortranOrder(BaseEstimator,TransformerMixin):
         if type(X) is pd.DataFrame or type(X) is pd.Series:
             return X.to_numpy().asfortranarray(dtype=np.float32)
         else:
-            return X.asfortranarray()
+            return X.asfortranarray(dtype=np.float32)
     
 
 class DropConst(BaseEstimator,TransformerMixin):
@@ -104,7 +104,10 @@ class RunPipeline:
             zero_idx=modeled_runoff==0
             self.model={}
             self.model['zero']=PipelineModel(x[zero_idx],y[zero_idx],('lin-reg',{'max_poly_deg':1,'fit_intercept':False},None))
-            self.model['nonzero']=PipelineModel(x[~zero_idx],y[~zero_idx],self.model_spec_tup)
+            if x[~zero_idx].shape[0]>0:
+                self.model['nonzero']=PipelineModel(x[~zero_idx],y[~zero_idx],self.model_spec_tup)
+            else:
+                self.model['nonzero']=NullModel()
         else:assert False,f'self.data_filter:{self.data_filter} not developed'
             
             
@@ -128,7 +131,15 @@ class RunPipeline:
         test_stats=SeriesCompare(ytest.to_numpy(),yhat_test.to_numpy()[:,0])
         
         return yhat_test,test_stats
-        
+ 
+class NullModel():
+    def __init__(self):
+        pass
+    def fit(x,y,tup):
+        pass
+    def predict(x):
+        return x
+
 class PipelineModel(myLogger):
     def __init__(self,x,y,model_spec_tup):
         myLogger.__init__(self,)

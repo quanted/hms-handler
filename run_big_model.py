@@ -3,10 +3,17 @@ from warnings import filterwarnings
 
 if __name__=='__main__':
     filterwarnings('ignore')
-    cc=CC()
-    print('modeldict',cc.modeldict)
-    cc.runBigModel()
+    model_specs_list=[
+        {'lin-reg':{'max_poly_deg':2,'fit_intercept':False}},
+        {'lasso':{'max_poly_deg':3,'fit_intercept':False}},
+        {'gbr':{'kwargs':{}}}]
+    for model_specs in model_specs_list:
+        cc=CC()
+        cc.modeldict['model_specs']=model_specs    
+        print('modeldict',cc.modeldict)
+        cc.runBigModel()
     print('complete')
+    
     
 
     

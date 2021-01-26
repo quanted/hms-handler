@@ -11,7 +11,7 @@ import joblib
 from sklearn.pipeline import make_pipeline
 from sklearn.linear_model import LassoCV,LinearRegression
 from sklearn.preprocessing import StandardScaler,PolynomialFeatures
-from sklearn.model_selection import RepeatedKFold,GridSearchCV
+from sklearn.model_selection import RepeatedKFold,GridSearchCV,LeaveOneGroupOut
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -42,7 +42,7 @@ class ToFortranOrder(BaseEstimator,TransformerMixin):
     def __init__(self):
         pass
     def fit(self,X,y=None):
-        pass
+        return self
     def transform(self,X):
         if type(X) is pd.DataFrame or type(X) is pd.Series:
             return X.to_numpy().asfortranarray(dtype=np.float32)
@@ -67,17 +67,25 @@ class DropConst(BaseEstimator,TransformerMixin):
         else:
             return X[:,self.unique_>1]       
 
+
+
 class RunPipeline:
     def __init__(self,data_dict,model_spec_tup):
         self.model_spec_tup=model_spec_tup
-        if self.model_spec_tup[2]['cross_validate']:
+        self.modeldict=self.model_spec_tup[2]
+        if self.modeldict['cross_validate']:
             self.runCrossValidate(data_dict)
         else:
             self.runSingleModel(data_dict)
     
     def runCrossValidate(self,data_dict):
-        cv_dict=self.model_spec_tup[2]['cross_validate']
+        cv_dict=self.modeldict['cross_validate']
+        geog=self.modeldict['model_geog']
         n_reps=cv_dict['n_reps']
+        x=data_dict['x']
+        group_series=x.groupby(geog).cumcount()
+        #for 
+        
         #data_dict.....
             
     
@@ -87,8 +95,8 @@ class RunPipeline:
         x=data_dict['x']
         y=data_dict['y']
         myLogger.__init__(self,'runpipeline.log')
-        self.modeled_runoff_col=self.model_spec_tup[2]['sources']['modeled']
-        self.data_filter=self.model_spec_tup[2]['filter']
+        self.modeled_runoff_col=self.modeldict['sources']['modeled']
+        self.data_filter=self.modeldict['filter']
         if self.data_filter == 'none':
             self.model=PipelineModel(data_dict,self.model_spec_tup)
         elif self.data_filter == 'nonzero':
@@ -123,7 +131,7 @@ class RunPipeline:
         
 class PipelineModel(myLogger):
     def __init__(self,x,y,model_spec_tup):
-        myLogger.__init__(self)
+        myLogger.__init__(self,)
         model_name,specs,_=model_spec_tup
         cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=3)
         if model_name.lower() =='lin-reg':
@@ -494,9 +502,9 @@ class CompareCorrect(myLogger):
             'split_order':'chronological',#'random'
             'model_scale':'conus',#'comid'
             'model_specs':{
-                #'lin-reg':{'max_poly_deg':2,'fit_intercept':False}, 
+                'lin-reg':{'max_poly_deg':2,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
-                'lasso':{'max_poly_deg':3,'fit_intercept':False},
+                #'lasso':{'max_poly_deg':3,'fit_intercept':False},
                 #'gbr':{
                 #    'kwargs':{}
                     #'n_estimators':10000,

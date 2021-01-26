@@ -123,6 +123,7 @@ class RunPipeline:
         
 class PipelineModel(myLogger):
     def __init__(self,x,y,model_spec_tup):
+        myLogger.__init__(self)
         model_name,specs,_=model_spec_tup
         cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=3)
         if model_name.lower() =='lin-reg':

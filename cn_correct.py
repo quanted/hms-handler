@@ -124,7 +124,7 @@ class RunPipeline:
 class PipelineModel(myLogger):
     def __init__(self,x,y,model_spec_tup):
         model_name,specs,_=model_spec_tup
-        cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=5)
+        cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=3)
         if model_name.lower() =='lin-reg':
             deg=specs['max_poly_deg']
             param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
@@ -144,7 +144,7 @@ class PipelineModel(myLogger):
                 DropConst(),
                 ToFortranOrder(),
                 LassoCV(**lasso_kwargs,n_jobs=6))
-            self.pipe.fit(x,y.astype(np.float32))
+            self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']

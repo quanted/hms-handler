@@ -147,13 +147,20 @@ class PipelineModel(myLogger):
         cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=3)
         if model_name.lower() =='lin-reg':
             deg=specs['max_poly_deg']
-            param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
-            pipe=make_pipeline(
+            if deg>1:
+                pipe=make_pipeline(
                 StandardScaler(),
                 PolynomialFeatures(include_bias=False),
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
-            self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=6)
+                param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
+                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=6)
+            else:
+                self.pipe=make_pipeline(
+                StandardScaler(),
+                #PolynomialFeatures(include_bias=False),
+                #DropConst(),       
+                LinearRegression(fit_intercept=specs['fit_intercept']))
             self.pipe.fit(x,y)
         elif model_name.lower() in ['l1','lasso']:
             deg=specs['max_poly_deg']

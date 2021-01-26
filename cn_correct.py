@@ -159,7 +159,7 @@ class PipelineModel(myLogger):
                 self.pipe=make_pipeline(
                 StandardScaler(),
                 #PolynomialFeatures(include_bias=False),
-                #DropConst(),       
+                DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
             self.pipe.fit(x,y)
         elif model_name.lower() in ['l1','lasso']:
@@ -180,9 +180,9 @@ class PipelineModel(myLogger):
             self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
-        self.logger.info(f'fit complete, starting yhat_train prediction')
-        self.yhat_train=pd.DataFrame(self.pipe.predict(x),index=x.index,columns=['yhat'])
-        self.logger.info(f'yhat_train prediction complete.')
+        #self.logger.info(f'fit complete, starting yhat_train prediction')
+        #self.yhat_train=pd.DataFrame(self.pipe.predict(x),index=x.index,columns=['yhat'])
+        #self.logger.info(f'yhat_train prediction complete.')
             
     def predict(self,x):
         return self.pipe.predict(x)

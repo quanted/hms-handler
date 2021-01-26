@@ -432,7 +432,7 @@ class DataCollection(myLogger):
         cv=self.modeldict['cross_validate']
         for m_name,specs in self.modeldict['model_specs'].items():
             if not cv:
-                self.model_results[m_name=self.run_it(X,y,m_name,specs)
+                self.model_results[m_name]=self.run_it(X,y,m_name,specs)
             else:
                 self.model_results[m_name]=[]
                 geog=self.modeldict['model_geog']
@@ -445,11 +445,7 @@ class DataCollection(myLogger):
                     self.model_results[m_name].append(model)
                     
     
-                                   
-    
-        
-            
-    def run_it(self,X,y,m_name,specs)
+    def run_it(self,X,y,m_name,specs):
         self.logger.info(f'starting {m_name}')
         t0=time()
         data_dict={'x':X,'y':y}
@@ -474,15 +470,18 @@ class DataCollection(myLogger):
         return model
 
     def runTestData(self):
-        if 
-        for m_name,model in self.model_results.items():
-                                   
+        for m_name,model_list in self.model_results.items():
+            if not self.modeldict['cross_validate']: 
+                model_list=[model_list]
+            for model in model_list:
+                for obj in self.comid_modeling_objects:
+                    if not m_name in obj.test_results:
+                        obj.test_results[m_name]=[]
+                    yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
+                    obj.test_results[m_name].append({'test_stats':test_stats,'yhat_test':yhat_test})
             for obj in self.comid_modeling_objects:
-                yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
-                obj.test_results[m_name]={'test_stats':test_stats,'yhat_test':yhat_test}
-        for obj in self.comid_modeling_objects:
-            uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
-            obj.test_results['uncorrected']={'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),'yhat_test':uncorr_yhat}
+                uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
+                obj.test_results['uncorrected']=[{'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),'yhat_test':uncorr_yhat}]
             
     def plotGeoTestData(self):
         geog=self.modeldict['model_geog']
@@ -499,9 +498,10 @@ class DataCollection(myLogger):
         for m_name in self.model_results.keys():
             data_dict={'nse':[],'pearson':[],geog:[]}
             for obj in self.comid_modeling_objects:
-                data_dict['nse'].append(obj.test_results[m_name]['test_stats'].nse)
-                data_dict['pearson'].append(obj.test_results[m_name]['test_stats'].nse)
-                data_dict[geog].append(self.comid_geog_dict[obj.comid][geog])
+                for result_dict in obj.test_results[m_name]:
+                    data_dict['nse'].append(result_dict['test_stats'].nse)
+                    data_dict['pearson'].append(result_dict['test_stats'].nse)
+                    data_dict[geog].append(self.comid_geog_dict[obj.comid][geog])
             mean_acc_df=pd.DataFrame(data_dict).groupby(geog).mean()
             #self.acc_df_dict[m_name]=mean_acc_df
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
@@ -569,11 +569,11 @@ class CompareCorrect(myLogger):
                 #no intercept b/c no dummy drop
                 #'lasso':{'max_poly_deg':3,'fit_intercept':False},
                 'gbr':{
-                #    'kwargs':{}
+                    'kwargs':{},#these pass through to sklearn's gbr
                     #'n_estimators':10000,
                     #'subsample':1,
                     #'max_depth':3
-                #}
+                }
             }
         }
         #self.logger=logging.getLogger(__name__)

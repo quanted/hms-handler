@@ -45,9 +45,9 @@ class ToFortranOrder(BaseEstimator,TransformerMixin):
         return self
     def transform(self,X):
         if type(X) is pd.DataFrame or type(X) is pd.Series:
-            return X.to_numpy().asfortranarray(dtype=np.float32)
+            return np.asfortranarray(X.to_numpy(),dtype=np.float32)
         else:
-            return X.asfortranarray(dtype=np.float32)
+            return np.asfortranarray(X,dtype=np.float32)
     
 
 class DropConst(BaseEstimator,TransformerMixin):

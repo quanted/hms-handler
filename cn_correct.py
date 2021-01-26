@@ -69,32 +69,17 @@ class DropConst(BaseEstimator,TransformerMixin):
 
 
 
-class RunPipeline:
+class PipeWrapper:
     def __init__(self,data_dict,model_spec_tup):
+        #self.data_hash=joblib.hash(data_dict)
         self.model_spec_tup=model_spec_tup
         self.modeldict=self.model_spec_tup[2]
-        if self.modeldict['cross_validate']:
-            self.runCrossValidate(data_dict)
-        else:
-            self.runSingleModel(data_dict)
-    
-    def runCrossValidate(self,data_dict):
-        cv_dict=self.modeldict['cross_validate']
-        geog=self.modeldict['model_geog']
-        n_reps=cv_dict['n_reps']
-        x=data_dict['x']
-        group_series=x.groupby(geog).cumcount()
-        #for 
-        
-        #data_dict.....
-            
-    
-    
-        
-    def runSingleModel(self,data_dict):
         x=data_dict['x']
         y=data_dict['y']
-        myLogger.__init__(self,'runpipeline.log')
+        if self.modeldict['cross_validate']:
+            self.train_comids=dict.fromkeys(x.index.unique(level='comid'))#dict for faster search
+        
+        myLogger.__init__(self,'PipeWrapper.log')
         self.modeled_runoff_col=self.modeldict['sources']['modeled']
         self.data_filter=self.modeldict['filter']
         if self.data_filter == 'none':
@@ -112,6 +97,8 @@ class RunPipeline:
             
             
     def predict(self,x):
+        if self.modeldict['cross_validate']:
+            x=self.remove_train_comids(x)
         if self.data_filter == 'none':
             return pd.DataFrame(self.model.predict(x),columns=[self.modeled_runoff_col],index=x.index)
         elif self.data_filter == 'nonzero':
@@ -125,8 +112,16 @@ class RunPipeline:
                 yhat_df[~zero_idx]=nonzero_yhat[:,None]
             return yhat_df
         
+    def remove_train_comids(self,x):
+        #assumes multi-index: (comid,date)
+        full_comid_list=x.index.unique(level='comid')
+        keep_comid_list=[comid for comid in full_comid_list if not comid in self.train_comids]
+        return x.loc[(keep_comid_list,slice(None)),:]
+    
     def get_prediction_and_stats(self,xtest,ytest):
         yhat_test=self.predict(xtest)
+        if self.modeldict['cross_validate']:
+            ytest=self.remove_train_comids(ytest)
         assert all([xtest.index[i]==ytest.index[i] for i in range(xtest.shape[0])])
         test_stats=SeriesCompare(ytest.to_numpy(),yhat_test.to_numpy()[:,0])
         
@@ -276,7 +271,7 @@ class CatchmentCorrection(myLogger):
         
         self.correction_dict={}
         for m_name,mdict in self.modeldict['model_specs'].items():
-            model=RunPipeline(x_train,y_train,deg=deg,model_spec_tup=(m_name,mdict,self.modeldict))  
+            model=PipeWrapper(x_train,y_train,deg=deg,model_spec_tup=(m_name,mdict,self.modeldict))  
             model.set_test_stats(x_test,y_test)
             self.correction_dict[f'{m_name}']=model
         
@@ -327,7 +322,33 @@ class ComidData(myLogger):
         self.y_train=y_df.iloc[:split_idx]
         self.x_test=x_df.iloc[split_idx:]
         self.y_test=y_df.iloc[split_idx:]
-    
+ 
+
+class GroupDFSplitter(myLogger):
+    def __init__(self,n_reps):
+        myLogger.__init__(self)
+        self.n_reps=n_reps
+    def get_df_split(self,groups):
+        if type(groups) is pd.Series:
+            groups=pd.DataFrame(groups,columns=['group'])
+        inferred_group_name=groups.columns.to_list()[0]
+        print(inferred_group_name)
+        num_groups=len(pd.unique(groups.loc[:,inferred_group_name].to_numpy()))
+        for seed in range(self.n_reps):
+            shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
+            #print('\n\n\n\nshuffle_group:\n',shuf_grp)
+            for i in range(num_groups):
+                selector=list(range(num_groups))
+                selector.pop(i)
+                grp=shuf_grp.groupby(by=inferred_group_name).cumcount()
+                grp_bool=grp.map(lambda x:x in selector)
+                yield grp_bool
+            
+        
+        
+        
+        
+
 
 class DataCollection(myLogger):
     def __init__(self,comidlist,modeldict,comid_geog_dict):
@@ -408,32 +429,54 @@ class DataCollection(myLogger):
         X=self.big_x_train
         y=self.big_y_train
         self.model_results={}
-        data_filter=self.modeldict['filter']
+        cv=self.modeldict['cross_validate']
         for m_name,specs in self.modeldict['model_specs'].items():
-            self.logger.info(f'starting {m_name}')
-            t0=time()
-            data_dict={'x':X,'y':y}
-            args=[data_dict,(m_name,specs,self.modeldict)]
-            name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
-            if os.path.exists(name):
-                try:
-                    with open(name,'rb') as f:
-                        model=pickle.load(f)
-                    self.model_results[m_name]=model
-                    self.logger.info(f'succesful load from disk for {m_name} from {name}')
-                    continue
-                except:
-                    self.logger.exception(f'error loading {name} for {m_name}, redoing.')
-            model=RunPipeline(*args)
-            self.model_results[m_name]=model
-            with open(name,'wb') as f:
-                pickle.dump(model,f)
-            t1=time()
-            self.logger.info(f'{m_name} took {(t1-t0)/60} minutes to complete')
-            print(f'{m_name} took {(t1-t0)/60} minutes to complete')
+            if not cv:
+                self.model_results[m_name=self.run_it(X,y,m_name,specs)
+            else:
+                self.model_results[m_name]=[]
+                geog=self.modeldict['model_geog']
+                reps=cv['n_reps']
+                strat=cv['strategy']
+                assert strat=='leave_one_group_out',f'{strat} not developed'
+                group_indicator=self.big_x_train_raw.loc[:,geog]
+                for bool_idx in GroupDFSplitter(reps).get_df_split(group_indicator):
+                    model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs)
+                    self.model_results[m_name].append(model)
+                    
+    
+                                   
+    
+        
             
+    def run_it(self,X,y,m_name,specs)
+        self.logger.info(f'starting {m_name}')
+        t0=time()
+        data_dict={'x':X,'y':y}
+        args=[data_dict,(m_name,specs,self.modeldict)]
+        name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
+        if os.path.exists(name):
+            try:
+                with open(name,'rb') as f:
+                    model=pickle.load(f)
+                #self.model_results[m_name]=model
+                self.logger.info(f'succesful load from disk for {m_name} from {name}')
+                return model
+            except:
+                self.logger.exception(f'error loading {name} for {m_name}, redoing.')
+        model=PipeWrapper(*args)
+        self.model_results[m_name]=model
+        with open(name,'wb') as f:
+            pickle.dump(model,f)
+        t1=time()
+        self.logger.info(f'{m_name} took {(t1-t0)/60} minutes to complete')
+        print(f'{m_name} took {(t1-t0)/60} minutes to complete')
+        return model
+
     def runTestData(self):
+        if 
         for m_name,model in self.model_results.items():
+                                   
             for obj in self.comid_modeling_objects:
                 yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
                 obj.test_results[m_name]={'test_stats':test_stats,'yhat_test':yhat_test}
@@ -471,7 +514,7 @@ class DataCollection(myLogger):
                 pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
                 pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
                 self.add_states(ax)
-                fig.savefig(f'results/accuracy_{m_name}_{metric}.png')
+                fig.savefig(os.path.join('print',f'accuracy_{m_name}_{metric}.png'))
         
             
     def add_states(self,ax):
@@ -511,8 +554,10 @@ class CompareCorrect(myLogger):
         self.proc_count=12
         if not os.path.exists('results'):
             os.mkdir('results')
+        if not os.path.exists('print'):
+            os.mkdir('print')
         self.modeldict={
-            'cross_validate':False,
+            'cross_validate':False,#{'n_reps':3,'strategy':'leave_one_group_out'}
             'model_geog':'section',
             'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
             'filter':'nonzero',#'none',#'nonzero'
@@ -523,7 +568,7 @@ class CompareCorrect(myLogger):
                 'lin-reg':{'max_poly_deg':2,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
                 #'lasso':{'max_poly_deg':3,'fit_intercept':False},
-                #'gbr':{
+                'gbr':{
                 #    'kwargs':{}
                     #'n_estimators':10000,
                     #'subsample':1,
@@ -663,7 +708,7 @@ class CompareCorrect(myLogger):
             pos_eco_geog_data.plot(column=col,ax=ax,cmap='plasma',legend=True,)
             #self.param_gdf.boundary.plot(ax=ax,edgecolor='w',linewidth=1)
             self.add_states(ax)
-            fig.savefig(f'accuracy_{model_name}_{col}.png')
+            fig.savefig(os.path.join('print',f'accuracy_{model_name}_{col}.png'))
         #ax.legend()
         
         

@@ -338,13 +338,14 @@ class GroupDFSplitter(myLogger):
             groups=pd.DataFrame(groups,columns=['group'])
         inferred_group_name=groups.columns.to_list()[0]
         print(f'split leaving one member out grouping:{inferred_group_name}')
+        n=groups.shape[0]
         num_groups=len(pd.unique(groups.loc[:,inferred_group_name].to_numpy()))
         for seed in range(self.n_reps):
             shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
             #print('\n\n\n\nshuffle_group:\n',shuf_grp)
             for i in range(num_groups):
-                selector=list(range(num_groups))
-                selector.pop(i)
+                #selector=list(range(num_groups))
+                #selector.pop(i)
                 grp=shuf_grp.groupby(by=inferred_group_name).cumcount()
                 grp_bool=grp!=pd.Series([i]*n,name=grp.name,index=grp.index)
                 #grp_bool=grp.map(lambda x:x in selector)

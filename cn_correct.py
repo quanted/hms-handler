@@ -334,10 +334,10 @@ class GroupDFSplitter(myLogger):
         self.n_reps=n_reps
         
     def get_df_split(self,groups):
-        if type(groups) is pd.Series:
+        if type(groups) in [np.ndarray, pd.Series]:
             groups=pd.DataFrame(groups,columns=['group'])
         inferred_group_name=groups.columns.to_list()[0]
-        print(inferred_group_name)
+        print(f'split leaving one member out grouping:{inferred_group_name}')
         num_groups=len(pd.unique(groups.loc[:,inferred_group_name].to_numpy()))
         for seed in range(self.n_reps):
             shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
@@ -346,7 +346,8 @@ class GroupDFSplitter(myLogger):
                 selector=list(range(num_groups))
                 selector.pop(i)
                 grp=shuf_grp.groupby(by=inferred_group_name).cumcount()
-                grp_bool=grp.map(lambda x:x in selector)
+                grp_bool=grp!=pd.Series([i]*n,name=grp.name,index=grp.index)
+                #grp_bool=grp.map(lambda x:x in selector)
                 yield grp_bool
             
 class Runner(Process,myLogger):
@@ -358,7 +359,7 @@ class Runner(Process,myLogger):
         self.bool_idx=bool_idx
         
     def run(self):
-        myLoger.__init__(self)
+        myLogger.__init__(self)
         self.model=self.runmodel()
         
     def runmodel(self):
@@ -474,7 +475,7 @@ class DataCollection(myLogger):
         geog=self.modeldict['model_geog']
         reps=cv['n_reps']
         strat=cv['strategy']
-        assert strat=='leave_one_group_out',f'{strat} not developed'
+        assert strat=='leave_one_member_out',f'{strat} not developed'
         group_indicator=self.big_x_train_raw.loc[:,[geog]] #_raw is data before dummies created
         if cv:
             self.logger.info(f'making bool_idx for cv')
@@ -507,7 +508,7 @@ class DataCollection(myLogger):
     def runTestData(self):
         for m_name,model_list in self.model_results.items():
             if not self.modeldict['cross_validate']: 
-                model_list=[model_list]
+                if not type(model_list) is list:model_list=[model_list]
             for model in model_list:
                 for obj in self.comid_modeling_objects:
                     if not m_name in obj.test_results:
@@ -592,7 +593,7 @@ class CompareCorrect(myLogger):
         if not os.path.exists('print'):
             os.mkdir('print')
         self.modeldict={
-            'cross_validate':{'n_reps':3,'strategy':'leave_one_group_out'},#False,#
+            'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
             'model_geog':'section',
             'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
             'filter':'nonzero',#'none',#'nonzero'

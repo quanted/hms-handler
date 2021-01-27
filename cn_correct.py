@@ -360,7 +360,7 @@ class Runner(Process,myLogger):
         myLoger.__init__(self)
         self.model=self.runmodel()
         
-    def runmodel(self)
+    def runmodel(self):
         self.logger.info(f'starting {self.m_name}')
         t0=time()
         data_dict={'x':self.X,'y':self.y}
@@ -467,55 +467,37 @@ class DataCollection(myLogger):
         y=self.big_y_train
         self.model_results={}
         cv=self.modeldict['cross_validate']
-        i=0
+        geog=self.modeldict['model_geog']
+        reps=cv['n_reps']
+        strat=cv['strategy']
+        assert strat=='leave_one_group_out',f'{strat} not developed'
+        group_indicator=self.big_x_train_raw.loc[:,[geog]]
+        if cv:
+            self.logger.info(f'making bool_idx for cv')
+            bool_idx_list=[bool_idx for bool_idx in GroupDFSplitter(reps).get_df_split(group_indicator)]
+            self.logger.info(f'bool_idx_list complete')
         for m_name,specs in self.modeldict['model_specs'].items():
-            single_spec_modeldict=self.modeldict
-            single_spec_modeldict['model_specs']=specs
+            single_modeldict=self.modeldict
+            single_modeldict['model_specs']={m_name:specs}
             if not cv:
-                self.model_results[m_name]=[self.Runner(X,y,m_name,specs,single_spec_modeldict).run().model]
+                self.model_results[m_name]=[self.Runner(X,y,m_name,specs,single_modeldict).run().model]
             else:
                 self.model_results[m_name]=[]
-                geog=self.modeldict['model_geog']
-                reps=cv['n_reps']
-                strat=cv['strategy']
-                assert strat=='leave_one_group_out',f'{strat} not developed'
-                group_indicator=self.big_x_train_raw.loc[:,[geog]]
+                
                 args_list=[]
-                for bool_idx in GroupDFSplitter(reps).get_df_split(group_indicator):
-                    i+=1
+                for bool_idx in bool_idx_list:
                     #self.logger.info(f'cv run_{i} starting')
-                    args_list.append([bool_idx],y[bool_idx],m_name,specs,single_spec_modeldict)
-                    #model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs,single_spec_modeldict).run()
+                    #self.logger.info(f'building args_list for {specs}')
+                    args=[X[bool_idx],y[bool_idx],m_name,specs,single_modeldict]
+                    args_list.append(args)
+                    #model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs,single_modeldict).run()
                     #self.logger.info(f'cv run_{i} complete')
                     #self.model_results[m_name].append(model)
+                self.logger.info(f'starting multiproc Runners for {m_name}')
                 results=MpHelper().runAsMultiProc(Runner,args_list,proc_count=10)
                 self.model_results[m_name].extend([result.model for result in results])
+                self.logger.info(f'Runners complete for {m_name}')
                     
-                    
-    
-    def run_it(self,X,y,m_name,specs,modeldict):
-        self.logger.info(f'starting {m_name}')
-        t0=time()
-        data_dict={'x':X,'y':y}
-        args=[data_dict,(m_name,specs,modeldict)]
-        name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
-        if os.path.exists(name):
-            try:
-                with open(name,'rb') as f:
-                    model=pickle.load(f)
-                #self.model_results[m_name]=model
-                self.logger.info(f'succesful load from disk for {m_name} from {name}')
-                return model
-            except:
-                self.logger.exception(f'error loading {name} for {m_name}, redoing.')
-        model=PipeWrapper(*args)
-        #self.model_results[m_name]=model
-        with open(name,'wb') as f:
-            pickle.dump(model,f)
-        t1=time()
-        self.logger.info(f'{m_name} took {(t1-t0)/60} minutes to complete')
-        print(f'{m_name} took {(t1-t0)/60} minutes to complete')
-        return model
 
     def runTestData(self):
         for m_name,model_list in self.model_results.items():

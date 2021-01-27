@@ -350,11 +350,12 @@ class GroupDFSplitter(myLogger):
                 yield grp_bool
             
 class Runner(Process,myLogger):
-    def __init__(self,X,y,m_name,specs,modeldict):
+    def __init__(self,X,y,m_name,specs,modeldict,bool_idx=False):
         self.X=X;self.y=y
         self.m_name=m_name
         self.specs=specs
         self.modeldict=modeldict
+        self.bool_idx=bool_idx
         
     def run(self):
         myLoger.__init__(self)
@@ -363,6 +364,9 @@ class Runner(Process,myLogger):
     def runmodel(self):
         self.logger.info(f'starting {self.m_name}')
         t0=time()
+        if self.bool_idx:
+            self.X=self.X[self.bool_idx]
+            self.y=self.y[self.bool_idx]
         data_dict={'x':self.X,'y':self.y}
         args=[data_dict,(m_name,self.specs,self.modeldict)]
         name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
@@ -471,7 +475,7 @@ class DataCollection(myLogger):
         reps=cv['n_reps']
         strat=cv['strategy']
         assert strat=='leave_one_group_out',f'{strat} not developed'
-        group_indicator=self.big_x_train_raw.loc[:,[geog]]
+        group_indicator=self.big_x_train_raw.loc[:,[geog]] #_raw is data before dummies created
         if cv:
             self.logger.info(f'making bool_idx for cv')
             bool_idx_list=[bool_idx for bool_idx in GroupDFSplitter(reps).get_df_split(group_indicator)]
@@ -488,7 +492,8 @@ class DataCollection(myLogger):
                 for bool_idx in bool_idx_list:
                     #self.logger.info(f'cv run_{i} starting')
                     #self.logger.info(f'building args_list for {specs}')
-                    args=[X[bool_idx],y[bool_idx],m_name,specs,single_modeldict]
+                    ##args=[X[bool_idx],y[bool_idx],m_name,specs,single_modeldict]
+                    args=[X,y,m_name,specs,single_modeldict]
                     args_list.append(args)
                     #model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs,single_modeldict).run()
                     #self.logger.info(f'cv run_{i} complete')

@@ -557,7 +557,7 @@ class CompareCorrect(myLogger):
         if not os.path.exists('print'):
             os.mkdir('print')
         self.modeldict={
-            'cross_validate':False,#{'n_reps':3,'strategy':'leave_one_group_out'}
+            'cross_validate':{'n_reps':3,'strategy':'leave_one_group_out'},#False,#
             'model_geog':'section',
             'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
             'filter':'nonzero',#'none',#'nonzero'
@@ -565,7 +565,7 @@ class CompareCorrect(myLogger):
             'split_order':'chronological',#'random'
             'model_scale':'conus',#'comid'
             'model_specs':{
-                'lin-reg':{'max_poly_deg':2,'fit_intercept':False}, 
+                'lin-reg':{'max_poly_deg':4,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
                 #'lasso':{'max_poly_deg':3,'fit_intercept':False},
                 'gbr':{

@@ -370,7 +370,7 @@ class Runner(Process,myLogger):
             self.X=self.X[self.bool_idx]
             self.y=self.y[self.bool_idx]
         data_dict={'x':self.X,'y':self.y}
-        args=[data_dict,(m_name,self.specs,self.modeldict)]
+        args=[data_dict,(self.m_name,self.specs,self.modeldict)]
         name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
         if os.path.exists(name):
             try:

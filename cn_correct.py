@@ -171,7 +171,11 @@ class PipelineModel(myLogger):
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
             else:kwargs={}
-            self.pipe=GradientBoostingRegressor(random_state=0,**kwargs)
+            param_grid={'max_depth':list(range(2,5)),
+                       'n_estimators':[100,500,1000]
+                       }
+            
+            self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=6)
             self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
@@ -328,6 +332,7 @@ class GroupDFSplitter(myLogger):
     def __init__(self,n_reps):
         myLogger.__init__(self)
         self.n_reps=n_reps
+        
     def get_df_split(self,groups):
         if type(groups) is pd.Series:
             groups=pd.DataFrame(groups,columns=['group'])
@@ -344,8 +349,40 @@ class GroupDFSplitter(myLogger):
                 grp_bool=grp.map(lambda x:x in selector)
                 yield grp_bool
             
+class Runner(Process,myLogger):
+    def __init__(self,X,y,m_name,specs,modeldict):
+        self.X=X;self.y=y
+        self.m_name=m_name
+        self.specs=specs
+        self.modeldict=modeldict
         
+    def run(self):
+        myLoger.__init__(self)
+        self.model=self.runmodel()
         
+    def runmodel(self)
+        self.logger.info(f'starting {self.m_name}')
+        t0=time()
+        data_dict={'x':self.X,'y':self.y}
+        args=[data_dict,(m_name,self.specs,self.modeldict)]
+        name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
+        if os.path.exists(name):
+            try:
+                with open(name,'rb') as f:
+                    model=pickle.load(f)
+                #self.model_results[m_name]=model
+                self.logger.info(f'succesful load from disk for {m_name} from {name}')
+                return model
+            except:
+                self.logger.exception(f'error loading {name} for {m_name}, redoing.')
+        model=PipeWrapper(*args)
+        #self.model_results[m_name]=model
+        with open(name,'wb') as f:
+            pickle.dump(model,f)
+        t1=time()
+        self.logger.info(f'{m_name} took {(t1-t0)/60} minutes to complete')
+        print(f'{m_name} took {(t1-t0)/60} minutes to complete')
+        return model        
         
         
 
@@ -430,26 +467,37 @@ class DataCollection(myLogger):
         y=self.big_y_train
         self.model_results={}
         cv=self.modeldict['cross_validate']
+        i=0
         for m_name,specs in self.modeldict['model_specs'].items():
+            single_spec_modeldict=self.modeldict
+            single_spec_modeldict['model_specs']=specs
             if not cv:
-                self.model_results[m_name]=self.run_it(X,y,m_name,specs)
+                self.model_results[m_name]=[self.Runner(X,y,m_name,specs,single_spec_modeldict).run().model]
             else:
                 self.model_results[m_name]=[]
                 geog=self.modeldict['model_geog']
                 reps=cv['n_reps']
                 strat=cv['strategy']
                 assert strat=='leave_one_group_out',f'{strat} not developed'
-                group_indicator=self.big_x_train_raw.loc[:,geog]
+                group_indicator=self.big_x_train_raw.loc[:,[geog]]
+                args_list=[]
                 for bool_idx in GroupDFSplitter(reps).get_df_split(group_indicator):
-                    model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs)
-                    self.model_results[m_name].append(model)
+                    i+=1
+                    #self.logger.info(f'cv run_{i} starting')
+                    args_list.append([bool_idx],y[bool_idx],m_name,specs,single_spec_modeldict)
+                    #model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs,single_spec_modeldict).run()
+                    #self.logger.info(f'cv run_{i} complete')
+                    #self.model_results[m_name].append(model)
+                results=MpHelper().runAsMultiProc(Runner,args_list,proc_count=10)
+                self.model_results[m_name].extend([result.model for result in results])
+                    
                     
     
-    def run_it(self,X,y,m_name,specs):
+    def run_it(self,X,y,m_name,specs,modeldict):
         self.logger.info(f'starting {m_name}')
         t0=time()
         data_dict={'x':X,'y':y}
-        args=[data_dict,(m_name,specs,self.modeldict)]
+        args=[data_dict,(m_name,specs,modeldict)]
         name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
         if os.path.exists(name):
             try:
@@ -461,7 +509,7 @@ class DataCollection(myLogger):
             except:
                 self.logger.exception(f'error loading {name} for {m_name}, redoing.')
         model=PipeWrapper(*args)
-        self.model_results[m_name]=model
+        #self.model_results[m_name]=model
         with open(name,'wb') as f:
             pickle.dump(model,f)
         t1=time()
@@ -565,7 +613,7 @@ class CompareCorrect(myLogger):
             'split_order':'chronological',#'random'
             'model_scale':'conus',#'comid'
             'model_specs':{
-                'lin-reg':{'max_poly_deg':4,'fit_intercept':False}, 
+                #'lin-reg':{'max_poly_deg':4,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
                 #'lasso':{'max_poly_deg':3,'fit_intercept':False},
                 'gbr':{

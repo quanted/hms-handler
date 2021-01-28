@@ -158,7 +158,7 @@ class PipelineModel(myLogger):
                 #PolynomialFeatures(include_bias=False),
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
-            self.pipe.fit(x,y)
+            #self.pipe.fit(x,y)
         elif model_name.lower() in ['l1','lasso']:
             deg=specs['max_poly_deg']
             lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv)
@@ -168,7 +168,7 @@ class PipelineModel(myLogger):
                 DropConst(),
                 ToFortranOrder(),
                 LassoCV(**lasso_kwargs,n_jobs=1))
-            self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
+            #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
@@ -178,9 +178,10 @@ class PipelineModel(myLogger):
                        }
             
             self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=1)
-            self.pipe.fit(x,y)
+            #self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
+        self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
         #self.logger.info(f'fit complete, starting yhat_train prediction')
         #self.yhat_train=pd.DataFrame(self.pipe.predict(x),index=x.index,columns=['yhat'])
         #self.logger.info(f'yhat_train prediction complete.')
@@ -504,7 +505,7 @@ class DataCollection(myLogger):
                     #self.logger.info(f'cv run_{i} complete')
                     #self.model_results[m_name].append(model)
                 self.logger.info(f'starting multiproc Runners for {m_name}')
-                results=MpHelper().runAsMultiProc(Runner,args_list,proc_count=10)
+                results=MpHelper().runAsMultiProc(Runner,args_list,proc_count=5)
                 self.model_results[m_name].extend([result.model for result in results])
                 self.logger.info(f'Runners complete for {m_name}')
                     
@@ -605,7 +606,6 @@ class CompareCorrect(myLogger):
             'split_order':'chronological',#'random'
             'model_scale':'conus',#'comid'
             'model_specs':{
-                'lin-reg':{'max_poly_deg':4,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
                 #'lasso':{'max_poly_deg':3,'fit_intercept':False},
                 'gbr':{
@@ -613,7 +613,8 @@ class CompareCorrect(myLogger):
                     #'n_estimators':10000,
                     #'subsample':1,
                     #'max_depth':3
-                }
+                },
+                'lin-reg':{'max_poly_deg':3,'fit_intercept':False},
             }
         }
         #self.logger=logging.getLogger(__name__)

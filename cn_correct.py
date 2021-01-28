@@ -133,7 +133,7 @@ class NullModel(BaseEstimator,RegressorMixin):
     def fit(self,x,y,w):
         pass
     def predict(self,x):
-        if len(x.shape>1):
+        if len(x.shape)>1:
             return np.mean(x,axis=1)
         return x
 
@@ -363,31 +363,35 @@ class Runner(myLogger):
         self.model=self.runmodel()
         
     def runmodel(self):
-        self.logger.info(f'starting {self.m_name}')
-        t0=time()
-        if self.bool_idx:
-            self.X=self.X[self.bool_idx]
-            self.y=self.y[self.bool_idx]
-        data_dict={'x':self.X,'y':self.y}
-        args=[data_dict,(self.m_name,self.specs,self.modeldict)]
-        name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
-        if os.path.exists(name):
-            try:
-                with open(name,'rb') as f:
-                    model=pickle.load(f)
-                #self.model_results[m_name]=model
-                self.logger.info(f'succesful load from disk for {m_name} from {name}')
-                return model
-            except:
-                self.logger.exception(f'error loading {name} for {m_name}, redoing.')
-        model=PipeWrapper(*args)
-        #self.model_results[m_name]=model
-        with open(name,'wb') as f:
-            pickle.dump(model,f)
-        t1=time()
-        self.logger.info(f'{m_name} took {(t1-t0)/60} minutes to complete')
-        print(f'{m_name} took {(t1-t0)/60} minutes to complete')
-        return model        
+        try:
+            self.logger.info(f'starting {self.m_name}')
+            t0=time()
+            if self.bool_idx:
+                self.X=self.X[self.bool_idx]
+                self.y=self.y[self.bool_idx]
+            data_dict={'x':self.X,'y':self.y}
+            args=[data_dict,(self.m_name,self.specs,self.modeldict)]
+            name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
+            if os.path.exists(name):
+                try:
+                    with open(name,'rb') as f:
+                        model=pickle.load(f)
+                    #self.model_results[m_name]=model
+                    self.logger.info(f'succesful load from disk for {m_name} from {name}')
+                    return model
+                except:
+                    self.logger.exception(f'error loading {name} for {m_name}, redoing.')
+            model=PipeWrapper(*args)
+            #self.model_results[m_name]=model
+            with open(name,'wb') as f:
+                pickle.dump(model,f)
+            t1=time()
+            self.logger.info(f'{m_name} took {(t1-t0)/60} minutes to complete')
+            print(f'{m_name} took {(t1-t0)/60} minutes to complete')
+            return model   
+        except:
+            self.logger.exception(f'error ')
+            assert False,'Halt'
         
         
 

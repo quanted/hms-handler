@@ -354,7 +354,7 @@ class GroupDFSplitter(myLogger):
                 yield grp_bool
             
 class Runner(myLogger):
-    def __init__(self,X,y,m_name,specs,modeldict,bool_idx=False):
+    def __init__(self,X,y,m_name,specs,modeldict,bool_idx=None):
         self.X=X;self.y=y
         self.m_name=m_name
         self.specs=specs
@@ -369,7 +369,7 @@ class Runner(myLogger):
         try:
             self.logger.info(f'starting {self.m_name}')
             t0=time()
-            if self.bool_idx:
+            if not self.bool_idx is None:
                 self.X=self.X[self.bool_idx]
                 self.y=self.y[self.bool_idx]
             data_dict={'x':self.X,'y':self.y}

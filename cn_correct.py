@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler,PolynomialFeatures
 from sklearn.model_selection import RepeatedKFold,GridSearchCV,LeaveOneGroupOut
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin,RegressorMixin
 from scipy.stats import pearsonr
 from multiprocessing import Process,Queue
 from mylogger import myLogger
@@ -127,12 +127,14 @@ class PipeWrapper:
         
         return yhat_test,test_stats
  
-class NullModel():
+class NullModel(BaseEstimator,RegressorMixin):
     def __init__(self):
         pass
-    def fit(x,y,tup):
+    def fit(self,x,y,w):
         pass
-    def predict(x):
+    def predict(self,x):
+        if len(x.shape>1):
+            return np.mean(x,axis=1)
         return x
 
 class PipelineModel(myLogger):
@@ -333,25 +335,22 @@ class GroupDFSplitter(myLogger):
         myLogger.__init__(self)
         self.n_reps=n_reps
         
-    def get_df_split(self,groups):
+    def get_df_split(self,groups,num_groups=None):
         if type(groups) in [np.ndarray, pd.Series]:
             groups=pd.DataFrame(groups,columns=['group'])
         inferred_group_name=groups.columns.to_list()[0]
-        num_groups=groups.value_counts(subset=inferred_group_name).min()
+        if num_groups is None:
+            num_groups=groups.value_counts(subset=inferred_group_name).min()
         print(f'split leaving one member out grouping:{inferred_group_name}')
         n=groups.shape[0]
         for seed in range(self.n_reps):
             shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
-            #print('\n\n\n\nshuffle_group:\n',shuf_grp)
+            grp=shuf_grp.groupby(by=inferred_group_name).cumcount()
             for i in range(num_groups):
-                #selector=list(range(num_groups))
-                #selector.pop(i)
-                grp=shuf_grp.groupby(by=inferred_group_name).cumcount()
                 grp_bool=grp!=pd.Series([i]*n,name=grp.name,index=grp.index)
-                #grp_bool=grp.map(lambda x:x in selector)
                 yield grp_bool
             
-class Runner(Process,myLogger):
+class Runner(myLogger):
     def __init__(self,X,y,m_name,specs,modeldict,bool_idx=False):
         self.X=X;self.y=y
         self.m_name=m_name
@@ -480,7 +479,7 @@ class DataCollection(myLogger):
         group_indicator=self.big_x_train_raw.loc[:,[geog]] #_raw is data before dummies created
         if cv:
             self.logger.info(f'making bool_idx for cv')
-            bool_idx_list=[bool_idx for bool_idx in GroupDFSplitter(reps).get_df_split(group_indicator)]
+            bool_idx_list=[bool_idx for bool_idx in GroupDFSplitter(reps,num_groups=5).get_df_split(group_indicator)]
             self.logger.info(f'bool_idx_list complete')
         for m_name,specs in self.modeldict['model_specs'].items():
             single_modeldict=self.modeldict

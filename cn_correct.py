@@ -537,7 +537,7 @@ class DataCollection(myLogger):
                     if not m_name in obj.test_results:
                         obj.test_results[m_name]=[]
                     yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
-                    if type(test_stats) is str: and test_stats=='none':
+                    if type(test_stats) is str:
                             self.logger.warning(f'test data from comid:{obj.comid}: {(yhat_test,test_stats)}')
                     else:
                         obj.test_results[m_name].append({'test_stats':test_stats,'yhat_test':yhat_test})

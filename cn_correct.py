@@ -105,7 +105,9 @@ class PipeWrapper:
             yhat_df=pd.DataFrame([np.nan]*x.shape[0],columns=[self.modeled_runoff_col],index=x.index)
             modeled_runoff=x.loc[:,self.modeled_runoff_col]
             zero_idx=modeled_runoff==0
-            yhat_df[zero_idx]=self.model['zero'].predict(x[zero_idx])[:,None]
+            x_zero=x[zero_idx]
+            if x_zero.shape[0]>0:
+                yhat_df[zero_idx]=self.model['zero'].predict(x_zero)[:,None]
             x_nonzero=x[~zero_idx]
             if x_nonzero.shape[0]>0:
                 nonzero_yhat=self.model['nonzero'].predict(x_nonzero)

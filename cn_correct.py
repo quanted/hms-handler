@@ -373,7 +373,7 @@ class Runner(myLogger):
                 self.X=self.X[self.bool_idx]
                 self.y=self.y[self.bool_idx]
             data_dict={'x':self.X,'y':self.y}
-            args=[data_dict,(self.m_name,self.specs,self.modeldict)]
+            args=[self.X,self.y,(self.m_name,self.specs,self.modeldict)]
             name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
             if os.path.exists(name):
                 try:
@@ -496,18 +496,20 @@ class DataCollection(myLogger):
             else:
                 self.model_results[m_name]=[]
                 
-                args_list=[]
+                args_list=[];kwargs_list=[]
                 for bool_idx in bool_idx_list:
                     #self.logger.info(f'cv run_{i} starting')
                     #self.logger.info(f'building args_list for {specs}')
                     ##args=[X[bool_idx],y[bool_idx],m_name,specs,single_modeldict]
                     args=[X,y,m_name,specs,single_modeldict]
                     args_list.append(args)
+                    kwargs={'bool_idx':bool_idx}
+                    kwargs_list.append(kwargs)
                     #model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs,single_modeldict).run()
                     #self.logger.info(f'cv run_{i} complete')
                     #self.model_results[m_name].append(model)
                 self.logger.info(f'starting multiproc Runners for {m_name}')
-                results=MpHelper().runAsMultiProc(Runner,args_list,proc_count=2)
+                results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_listproc_count=2)
                 self.model_results[m_name].extend([result.model for result in results])
                 self.logger.info(f'Runners complete for {m_name}')
                     

@@ -591,7 +591,7 @@ class DataCollection(myLogger):
 class CompareCorrect(myLogger):
     def __init__(self,):
         myLogger.__init__(self,'comparecorrect.log')
-        self.proc_count=12
+        self.proc_count=5
         if not os.path.exists('results'):
             os.mkdir('results')
         if not os.path.exists('print'):
@@ -605,7 +605,7 @@ class CompareCorrect(myLogger):
             'split_order':'chronological',#'random'
             'model_scale':'conus',#'comid'
             'model_specs':{
-                #'lin-reg':{'max_poly_deg':4,'fit_intercept':False}, 
+                'lin-reg':{'max_poly_deg':4,'fit_intercept':False}, 
                 #no intercept b/c no dummy drop
                 #'lasso':{'max_poly_deg':3,'fit_intercept':False},
                 'gbr':{

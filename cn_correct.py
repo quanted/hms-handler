@@ -149,7 +149,7 @@ class PipelineModel(myLogger):
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
                 param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
-                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=6)
+                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=1)
             else:
                 self.pipe=make_pipeline(
                 StandardScaler(),
@@ -165,17 +165,17 @@ class PipelineModel(myLogger):
                 PolynomialFeatures(include_bias=False,degree=deg),
                 DropConst(),
                 ToFortranOrder(),
-                LassoCV(**lasso_kwargs,n_jobs=6))
+                LassoCV(**lasso_kwargs,n_jobs=1))
             self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
             else:kwargs={}
-            param_grid={'max_depth':list(range(2,5)),
-                       'n_estimators':[100,500,1000]
+            param_grid={'max_depth':list(range(3,5)),
+                       'n_estimators':[100,500]
                        }
             
-            self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=6)
+            self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=1)
             self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
@@ -337,9 +337,9 @@ class GroupDFSplitter(myLogger):
         if type(groups) in [np.ndarray, pd.Series]:
             groups=pd.DataFrame(groups,columns=['group'])
         inferred_group_name=groups.columns.to_list()[0]
+        num_groups=groups.value_counts(subset=inferred_group_name).min()
         print(f'split leaving one member out grouping:{inferred_group_name}')
         n=groups.shape[0]
-        num_groups=len(pd.unique(groups.loc[:,inferred_group_name].to_numpy()))
         for seed in range(self.n_reps):
             shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
             #print('\n\n\n\nshuffle_group:\n',shuf_grp)

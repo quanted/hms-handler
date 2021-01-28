@@ -354,12 +354,13 @@ class GroupDFSplitter(myLogger):
                 yield grp_bool
             
 class Runner(myLogger):
-    def __init__(self,X,y,m_name,specs,modeldict,bool_idx=None):
+    def __init__(self,X,y,m_name,specs,modeldict,bool_idx=None,return_save_string=True):
         self.X=X;self.y=y
         self.m_name=m_name
         self.specs=specs
         self.modeldict=modeldict
         self.bool_idx=bool_idx
+        self.return_save_string=return_save_string
         
     def run(self):
         myLogger.__init__(self)
@@ -373,7 +374,7 @@ class Runner(myLogger):
                 self.X=self.X[self.bool_idx]
                 self.y=self.y[self.bool_idx]
             data_dict={'x':self.X,'y':self.y}
-            args=[self.X,self.y,(self.m_name,self.specs,self.modeldict)]
+            args=[data_dict,(self.m_name,self.specs,self.modeldict)]
             name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
             if os.path.exists(name):
                 try:
@@ -381,7 +382,9 @@ class Runner(myLogger):
                         model=pickle.load(f)
                     #self.model_results[m_name]=model
                     self.logger.info(f'succesful load from disk for {self.m_name} from {name}')
-                    return model
+                    if self.return_save_string:
+                        return name
+                    else return model
                 except:
                     self.logger.exception(f'error loading {name} for {self.m_name}, redoing.')
             model=PipeWrapper(*args)
@@ -391,7 +394,9 @@ class Runner(myLogger):
             t1=time()
             self.logger.info(f'{self.m_name} took {(t1-t0)/60} minutes to complete')
             print(f'{self.m_name} took {(t1-t0)/60} minutes to complete')
-            return model   
+            if self.return_save_string:
+                return name
+            else return model   
         except:
             self.logger.exception(f'error ')
             assert False,'Halt'
@@ -519,6 +524,9 @@ class DataCollection(myLogger):
             if not self.modeldict['cross_validate']: 
                 if not type(model_list) is list:model_list=[model_list]
             for model in model_list:
+                if type(model) is str:
+                    with open(model,'rb') as f:
+                        model=pickle.load(f)
                 for obj in self.comid_modeling_objects:
                     if not m_name in obj.test_results:
                         obj.test_results[m_name]=[]

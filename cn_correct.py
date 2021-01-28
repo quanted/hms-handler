@@ -331,22 +331,22 @@ class ComidData(myLogger):
  
 
 class GroupDFSplitter(myLogger):
-    def __init__(self,n_reps):
+    def __init__(self,n_reps,num_groups=None):
         myLogger.__init__(self)
         self.n_reps=n_reps
-        
-    def get_df_split(self,groups,num_groups=None):
+        self.num_groups=num_groups
+    def get_df_split(self,groups):
         if type(groups) in [np.ndarray, pd.Series]:
             groups=pd.DataFrame(groups,columns=['group'])
         inferred_group_name=groups.columns.to_list()[0]
-        if num_groups is None:
-            num_groups=groups.value_counts(subset=inferred_group_name).min()
+        if self.num_groups is None:
+            self.num_groups=groups.value_counts(subset=inferred_group_name).min()
         print(f'split leaving one member out grouping:{inferred_group_name}')
         n=groups.shape[0]
         for seed in range(self.n_reps):
             shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
             grp=shuf_grp.groupby(by=inferred_group_name).cumcount()
-            for i in range(num_groups):
+            for i in range(self.num_groups):
                 grp_bool=grp!=pd.Series([i]*n,name=grp.name,index=grp.index)
                 yield grp_bool
             

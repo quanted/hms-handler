@@ -99,6 +99,8 @@ class PipeWrapper:
     def predict(self,x):
         if self.modeldict['cross_validate']:
             x=self.remove_train_comids(x)
+            if type(x) is str:
+                return x
         if self.data_filter == 'none':
             return pd.DataFrame(self.model.predict(x),columns=[self.modeled_runoff_col],index=x.index)
         elif self.data_filter == 'nonzero':
@@ -118,10 +120,14 @@ class PipeWrapper:
         #assumes multi-index: (comid,date)
         full_comid_list=x.index.unique(level='comid')
         keep_comid_list=[comid for comid in full_comid_list if not comid in self.train_comids]
+        if len(keep_comid_list)==0:
+            return 'none'
         return x.loc[(keep_comid_list,slice(None)),:]
     
     def get_prediction_and_stats(self,xtest,ytest):
         yhat_test=self.predict(xtest)
+        if type(yhat_test) is str and yhat_test=='none':
+            return 'none','none'
         if self.modeldict['cross_validate']:
             ytest=self.remove_train_comids(ytest)
         assert all([xtest.index[i]==ytest.index[i] for i in range(xtest.shape[0])])
@@ -384,7 +390,7 @@ class Runner(myLogger):
                     self.logger.info(f'succesful load from disk for {self.m_name} from {name}')
                     if self.return_save_string:
                         return name
-                    else return model
+                    else: return model
                 except:
                     self.logger.exception(f'error loading {name} for {self.m_name}, redoing.')
             model=PipeWrapper(*args)
@@ -396,7 +402,7 @@ class Runner(myLogger):
             print(f'{self.m_name} took {(t1-t0)/60} minutes to complete')
             if self.return_save_string:
                 return name
-            else return model   
+            else: return model   
         except:
             self.logger.exception(f'error ')
             assert False,'Halt'
@@ -531,7 +537,10 @@ class DataCollection(myLogger):
                     if not m_name in obj.test_results:
                         obj.test_results[m_name]=[]
                     yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
-                    obj.test_results[m_name].append({'test_stats':test_stats,'yhat_test':yhat_test})
+                    if type(test_stats) is str: and test_stats=='none':
+                            self.logger.warning(f'test data from comid:{obj.comid}: {(yhat_test,test_stats)}')
+                    else:
+                        obj.test_results[m_name].append({'test_stats':test_stats,'yhat_test':yhat_test})
             for obj in self.comid_modeling_objects:
                 uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
                 obj.test_results['uncorrected']=[{'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),'yhat_test':uncorr_yhat}]

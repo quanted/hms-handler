@@ -378,17 +378,17 @@ class Runner(myLogger):
                     with open(name,'rb') as f:
                         model=pickle.load(f)
                     #self.model_results[m_name]=model
-                    self.logger.info(f'succesful load from disk for {m_name} from {name}')
+                    self.logger.info(f'succesful load from disk for {self.m_name} from {name}')
                     return model
                 except:
-                    self.logger.exception(f'error loading {name} for {m_name}, redoing.')
+                    self.logger.exception(f'error loading {name} for {self.m_name}, redoing.')
             model=PipeWrapper(*args)
             #self.model_results[m_name]=model
             with open(name,'wb') as f:
                 pickle.dump(model,f)
             t1=time()
-            self.logger.info(f'{m_name} took {(t1-t0)/60} minutes to complete')
-            print(f'{m_name} took {(t1-t0)/60} minutes to complete')
+            self.logger.info(f'{self.m_name} took {(t1-t0)/60} minutes to complete')
+            print(f'{self.m_name} took {(t1-t0)/60} minutes to complete')
             return model   
         except:
             self.logger.exception(f'error ')

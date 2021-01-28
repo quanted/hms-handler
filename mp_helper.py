@@ -54,11 +54,15 @@ class MpHelper(myLogger):
             self.logger.exception('error in runasmultiproc')
             assert False,'unexpected error'
         pct_complete=0
+        check_count=0
         while countdown:
             try:
-                self.logger.info(f'multiproc checking q. countdown:{countdown}')
+                check_count+=1
+                if check_count%5==0:
+                    self.logger.info(f'multiproc checking q. countdown:{countdown}')
                 try:
                     i,result=q.get(True,20)
+                    check_count=0
                 except:
                     if not q.empty():
                         self.logger.exception(f'q not empty, but error encountered ')

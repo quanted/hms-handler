@@ -151,7 +151,7 @@ class PipelineModel(myLogger):
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
                 param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
-                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=1)
+                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=4)
             else:
                 self.pipe=make_pipeline(
                 StandardScaler(),
@@ -167,7 +167,7 @@ class PipelineModel(myLogger):
                 PolynomialFeatures(include_bias=False,degree=deg),
                 DropConst(),
                 ToFortranOrder(),
-                LassoCV(**lasso_kwargs,n_jobs=1))
+                LassoCV(**lasso_kwargs,n_jobs=4))
             #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
@@ -177,7 +177,7 @@ class PipelineModel(myLogger):
                        'n_estimators':[100,500]
                        }
             
-            self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=1)
+            self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=4)
             #self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
@@ -592,7 +592,7 @@ class DataCollection(myLogger):
 class CompareCorrect(myLogger):
     def __init__(self,):
         myLogger.__init__(self,'comparecorrect.log')
-        self.proc_count=5
+        self.proc_count=2
         if not os.path.exists('results'):
             os.mkdir('results')
         if not os.path.exists('print'):

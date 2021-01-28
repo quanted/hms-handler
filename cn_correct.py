@@ -141,7 +141,7 @@ class PipelineModel(myLogger):
     def __init__(self,x,y,model_spec_tup):
         myLogger.__init__(self,)
         model_name,specs,_=model_spec_tup
-        cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=3)
+        cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=1)
         if model_name.lower() =='lin-reg':
             deg=specs['max_poly_deg']
             if deg>1:
@@ -616,7 +616,7 @@ class CompareCorrect(myLogger):
                 },
                 'lin-reg':{'max_poly_deg':3,'fit_intercept':False},
             }
-        }
+        } 
         #self.logger=logging.getLogger(__name__)
         clist_df=pd.read_csv('catchments-list-cleaned.csv')
         self.comid_physio=clist_df.drop('comid',axis=1,inplace=False)

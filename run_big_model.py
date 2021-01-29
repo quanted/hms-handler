@@ -11,8 +11,8 @@ if __name__=='__main__':
                 #'subsample':1,
                 #'max_depth':3
                 }},
-        {'lin-reg':{'max_poly_deg':3,'fit_intercept':False}},
-        {'lasso':{'max_poly_deg':3,'fit_intercept':False}},
+        #{'lin-reg':{'max_poly_deg':3,'fit_intercept':False}},
+        #{'lasso':{'max_poly_deg':3,'fit_intercept':False}},
     ]
     for model_spec in model_spec_list:
         try:

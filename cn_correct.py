@@ -6,7 +6,7 @@ import re
 import os
 import logging
 import matplotlib.pyplot as plt
-from random import shuffle
+from random import shuffle,seed
 import joblib
 from sklearn.pipeline import make_pipeline
 from sklearn.linear_model import LassoCV,LinearRegression
@@ -77,7 +77,7 @@ class PipeWrapper:
         x=data_dict['x']
         y=data_dict['y']
         if self.modeldict['cross_validate']:
-            self.train_comids=dict.fromkeys(x.index.unique(level='comid'))#dict for faster search
+            self.train_comids=dict.fromkeys(x.index.get_level_values('comid').unique())#dict for faster search
         
         myLogger.__init__(self,'PipeWrapper.log')
         self.modeled_runoff_col=self.modeldict['sources']['modeled']
@@ -118,11 +118,17 @@ class PipeWrapper:
         
     def remove_train_comids(self,x):
         #assumes multi-index: (comid,date)
-        full_comid_list=x.index.unique(level='comid')
-        keep_comid_list=[comid for comid in full_comid_list if not comid in self.train_comids]
-        if len(keep_comid_list)==0:
-            return 'none'
-        return x.loc[(keep_comid_list,slice(None)),:]
+        full_comid_list=x.index.get_level_values('comid').unique().to_list()
+        if any([comid in self.train_comids for comid in full_comid_list]):
+            keep_comid_list=[comid for comid in full_comid_list if not comid in self.train_comids]
+            if len(keep_comid_list)==0:
+                self.logger.warning(f'making prediction and len(full_comid_list):{len(full_comid_list)} and len(keep_comid_list): {len(keep_comid_list)}')
+                return 'none'
+            self.logger.info(f'making prediction and len(full_comid_list):{len(full_comid_list)} and len(keep_comid_list): {len(keep_comid_list)}. {keep_comid_list}, x: {x}')
+            xclean=x.loc[(keep_comid_list,slice(None)),:]
+            return xclean
+        else:
+            return x
     
     def get_prediction_and_stats(self,xtest,ytest):
         yhat_test=self.predict(xtest)
@@ -181,11 +187,13 @@ class PipelineModel(myLogger):
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
             else:kwargs={}
+                
+            self.pipe=GradientBoostingRegressor(random_state=0,**kwargs)    
             param_grid={'max_depth':list(range(3,5)),
                        'n_estimators':[100,500]
                        }
             
-            self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=4)
+            #self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=4)
             #self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
@@ -339,33 +347,36 @@ class ComidData(myLogger):
         self.y_test=y_df.iloc[split_idx:]
  
 
-class GroupDFSplitter(myLogger):
+"""class GroupDFSplitter(myLogger):
     def __init__(self,n_reps,num_groups=None):
         myLogger.__init__(self)
         self.n_reps=n_reps
         self.num_groups=num_groups
     def get_df_split(self,groups):
+        self.logger.info(f'groups:{groups}')
         if type(groups) in [np.ndarray, pd.Series]:
             groups=pd.DataFrame(groups,columns=['group'])
         inferred_group_name=groups.columns.to_list()[0]
         if self.num_groups is None:
-            self.num_groups=groups.value_counts(subset=inferred_group_name).min()
+            #self.num_groups=groups.value_counts(subset=inferred_group_name).min()
         print(f'split leaving one member out grouping:{inferred_group_name}')
         n=groups.shape[0]
         for seed in range(self.n_reps):
             shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
-            grp=shuf_grp.groupby(by=inferred_group_name).cumcount()
+            grp=shuf_grp.groupby(by=inferred_group_name).groupby(by='comid'.cumcount()
+            self.logger.info(f'seed:{seed}, grp: {grp}')
             for i in range(self.num_groups):
                 grp_bool=grp!=pd.Series([i]*n,name=grp.name,index=grp.index)
-                yield grp_bool
+                self.logger.info(f'i: {i}, grp_bool:{grp_bool}')
+                yield grp_bool"""
             
 class Runner(myLogger):
-    def __init__(self,X,y,m_name,specs,modeldict,bool_idx=None,return_save_string=True):
+    def __init__(self,X,y,m_name,specs,modeldict,train_comids=None,return_save_string=True):
         self.X=X;self.y=y
         self.m_name=m_name
         self.specs=specs
         self.modeldict=modeldict
-        self.bool_idx=bool_idx
+        self.train_comids=train_comids
         self.return_save_string=return_save_string
         
     def run(self):
@@ -376,9 +387,13 @@ class Runner(myLogger):
         try:
             self.logger.info(f'starting {self.m_name}')
             t0=time()
-            if not self.bool_idx is None:
-                self.X=self.X[self.bool_idx]
-                self.y=self.y[self.bool_idx]
+            if not self.train_comids is None:
+                self.logger.info(f'Before applying boolean, m_name:{self.m_name} has self.X.shape:{self.X.shape}')
+                self.X=self.X.loc[(self.train_comids,slice(None)),:]
+                self.y=self.y.loc[(self.train_comids,slice(None))]
+                self.logger.info(f'after applying boolean, m_name:{self.m_name} has self.X.shape:{self.X.shape}')
+            else:
+                self.logger.info(f'm_name:{self.m_name} has train_comids:{self.train_comids}')
             data_dict={'x':self.X,'y':self.y}
             args=[data_dict,(self.m_name,self.specs,self.modeldict)]
             name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
@@ -441,7 +456,7 @@ class DataCollection(myLogger):
             
         for comid in self.comidlist:
             comid_data_obj=ComidData(comid,self.modeldict['sources'])
-            if comid_data_obj.nonzero_count>100:
+            if comid_data_obj.nonzero_count>32:
                 self.comid_data_object_dict[comid]=comid_data_obj
             else:
                 self.failed_comid_dict[comid]=f'runoff_model_data_df too small with shape:{comid_data_obj.runoff_model_data_df.shape}'
@@ -496,9 +511,10 @@ class DataCollection(myLogger):
         assert strat=='leave_one_member_out',f'{strat} not developed'
         group_indicator=self.big_x_train_raw.loc[:,[geog]] #_raw is data before dummies created
         if cv:
-            self.logger.info(f'making bool_idx for cv')
-            bool_idx_list=[bool_idx for bool_idx in GroupDFSplitter(reps,num_groups=5).get_df_split(group_indicator)]
-            self.logger.info(f'bool_idx_list complete')
+            self.logger.info(f'making comid_train_list for cv')
+            comid_train_list=self.build_comid_train_list(reps)                                                     
+            #bool_idx_list=[bool_idx for bool_idx in GroupDFSplitter(reps,num_groups=5).get_df_split(group_indicator)]
+            self.logger.info(f'comid_train_list_list complete')
         for m_name,specs in self.modeldict['model_specs'].items():
             single_modeldict=self.modeldict
             single_modeldict['model_specs']={m_name:specs}
@@ -508,13 +524,13 @@ class DataCollection(myLogger):
                 self.model_results[m_name]=[]
                 
                 args_list=[];kwargs_list=[]
-                for bool_idx in bool_idx_list:
+                for train_comids in comid_train_list:
                     #self.logger.info(f'cv run_{i} starting')
                     #self.logger.info(f'building args_list for {specs}')
                     ##args=[X[bool_idx],y[bool_idx],m_name,specs,single_modeldict]
                     args=[X,y,m_name,specs,single_modeldict]
                     args_list.append(args)
-                    kwargs={'bool_idx':bool_idx}
+                    kwargs={'train_comids':train_comids}
                     kwargs_list.append(kwargs)
                     #model=self.run_it(X[bool_idx],y[bool_idx],m_name,specs,single_modeldict).run()
                     #self.logger.info(f'cv run_{i} complete')
@@ -523,8 +539,35 @@ class DataCollection(myLogger):
                 results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_list,proc_count=2)
                 self.model_results[m_name].extend([result.model for result in results])
                 self.logger.info(f'Runners complete for {m_name}')
-                    
-
+     
+    def build_comid_train_list(self,reps,num_groups=5):
+        comid_train_list=[]
+        full_comid_list=[]
+        geog_comids_dict={}
+        model_geog=self.modeldict['model_geog']
+        for comid,geogs in self.comid_geog_dict.items():
+            geog=geogs[model_geog]
+            if not geog in geog_comids_dict:
+                geog_comids_dict[geog]=[]
+            geog_comids_dict[geog].append(comid)
+            full_comid_list.append(comid)
+        for r in range(reps):
+            seed(r)
+            [shuffle(comids) for comids in geog_comids_dict.values()]
+            for g in range(num_groups):
+                drop_comids={}
+                for comids in geog_comids_dict.values():
+                    try:drop_comids[comids[g]]=None
+                    except IndexError: self.logger.info(f'index error for idx:{g}')
+                    except:
+                        self.logger.exception('error')
+                        assert False,'halt'
+                comid_train_list.append([c for c in full_comid_list if not c in drop_comids])
+        return comid_train_list
+                
+                                                                 
+            
+                                                                 
     def runTestData(self):
         for m_name,model_list in self.model_results.items():
             if not self.modeldict['cross_validate']: 
@@ -536,10 +579,12 @@ class DataCollection(myLogger):
                 for obj in self.comid_modeling_objects:
                     if not m_name in obj.test_results:
                         obj.test_results[m_name]=[]
-                    yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
-                    if type(test_stats) is str:
-                            self.logger.warning(f'test data from comid:{obj.comid}: {(yhat_test,test_stats)}')
-                    else:
+                    if not self.modeldict['cross_validate'] or not obj.comid in model.train_comids:
+                        yhat_test,test_stats=model.get_prediction_and_stats(obj.x_test_float,obj.y_test)
+                        if type(test_stats) is str:
+                                self.logger.warning(f'test data from comid:{obj.comid}: {(yhat_test,test_stats)}')
+                        else:
+                            self.logger.info(f'test data shape and stats from comid:{obj.comid}: {(yhat_test.shape,test_stats)}')
                         obj.test_results[m_name].append({'test_stats':test_stats,'yhat_test':yhat_test})
             for obj in self.comid_modeling_objects:
                 uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]

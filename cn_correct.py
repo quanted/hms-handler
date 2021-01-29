@@ -165,7 +165,7 @@ class PipelineModel(myLogger):
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
                 param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
-                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=4)
+                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=1)
             else:
                 self.pipe=make_pipeline(
                 StandardScaler(),
@@ -181,7 +181,7 @@ class PipelineModel(myLogger):
                 PolynomialFeatures(include_bias=False,degree=deg),
                 DropConst(),
                 ToFortranOrder(),
-                LassoCV(**lasso_kwargs,n_jobs=4))
+                LassoCV(**lasso_kwargs,n_jobs=1))
             #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
@@ -536,7 +536,7 @@ class DataCollection(myLogger):
                     #self.logger.info(f'cv run_{i} complete')
                     #self.model_results[m_name].append(model)
                 self.logger.info(f'starting multiproc Runners for {m_name}')
-                results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_list,proc_count=2)
+                results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_list,proc_count=1)
                 self.model_results[m_name].extend([result.model for result in results])
                 self.logger.info(f'Runners complete for {m_name}')
      

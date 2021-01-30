@@ -672,7 +672,7 @@ class CompareCorrect(myLogger):
                 fig.suptitle(f'modeldict:{self.modeldict}')
                 ax=fig.add_subplot(1,1,1)
                 ax.set_title(f'{m_name}_{metric}')
-                eco_geog.plot(color='lightgrey')
+                #eco_geog.plot(color='lightgrey')
                 #pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
                 #pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
                 norm = TwoSlopeNorm(vmin=-1,vcenter=0, vmax=1)

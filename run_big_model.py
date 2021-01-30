@@ -5,6 +5,7 @@ from traceback import format_exc
 if __name__=='__main__':
     filterwarnings('ignore')
     model_spec_list=[
+        {'lasso':{'max_poly_deg':5,'fit_intercept':False}},
         {'gbr':{
             'kwargs':{},#these pass through to sklearn's gbr
                 #'n_estimators':10000,
@@ -12,14 +13,13 @@ if __name__=='__main__':
                 #'max_depth':3
                 }},
         {'lin-reg':{'max_poly_deg':5,'fit_intercept':False}},
-        {'lasso':{'max_poly_deg':5,'fit_intercept':False}},
+        
         
         
     ]
     for model_spec in model_spec_list:
         try:
-            cc=CC()
-            cc.modeldict['model_specs']=model_spec
+            cc=CC(model_specs=model_spec)
             print('modeldict',cc.modeldict)
             cc.runBigModel()
             cc.plotGeoTestData()

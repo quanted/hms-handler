@@ -1,4 +1,4 @@
-import pickle
+import pickle,json
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -158,10 +158,11 @@ class NullModel(BaseEstimator,RegressorMixin):
     
     
 class MakePolyX(BaseEstimator,TransformerMixin):
-    def __init__(self,degree=2,col_name=None,interact=True):
+    def __init__(self,degree=2,col_name=None,interact=True,no_constant=True):
         self.degree=degree
         self.col_name=col_name
         self.interact=interact
+        self.no_constant=no_constant
     def fit(self,X,y=None):
         return self
     def transform(self,X):
@@ -181,7 +182,10 @@ class MakePolyX(BaseEstimator,TransformerMixin):
                 for ser in xlist:
                     i_list.append(X_.loc[:,col1]*ser)
                     i_list[-1].name=f'{col1}_X_{ser.name}'
-            xlist.extend(i_list)
+            if self.no_constant:
+                xlist=i_list
+            else:
+                xlist.extend(i_list)
         xlist.append(X_)
         return pd.concat(xlist,axis=1,)
     
@@ -191,7 +195,7 @@ class PipelineModel(myLogger):
         myLogger.__init__(self,)
         model_name,specs,modeldict=model_spec_tup
         model_col_name=modeldict['sources']['modeled']
-        cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=1)
+        cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=3)
         if model_name.lower() =='lin-reg':
             deg=specs['max_poly_deg']
             if deg>1:
@@ -317,6 +321,7 @@ class Runner(myLogger):
         self.m_name=m_name
         self.specs=specs
         self.modeldict=modeldict
+        self.results_folder=modeldict['results_folder']
         self.train_comids=train_comids
         self.return_save_string=return_save_string
         
@@ -337,7 +342,7 @@ class Runner(myLogger):
                 self.logger.info(f'm_name:{self.m_name} has train_comids:{self.train_comids}')
             data_dict={'x':self.X,'y':self.y}
             args=[data_dict,(self.m_name,self.specs,self.modeldict)]
-            name=os.path.join('results',f'pipe-{joblib.hash(args)}.pkl')
+            name=os.path.join(self.results_folder,f'pipe-{joblib.hash(args)}.pkl')
             if os.path.exists(name):
                 try:
                     with open(name,'rb') as f:
@@ -371,6 +376,7 @@ class DataCollection(myLogger):
         myLogger.__init__(self,'data_collection.log')
         self.comidlist=comidlist
         self.modeldict=modeldict
+        self.results_folder=modeldict['results_folder']
         self.comid_geog_dict=comid_geog_dict
         self.geog_names=['division','province','section']
         self.physio_path='ecoregions/physio.dbf'
@@ -387,7 +393,7 @@ class DataCollection(myLogger):
     def collectComidData(self):
         self.comid_data_object_dict={}
         
-        name=os.path.join('results',f'comiddata-{joblib.hash(self.comidlist)}.pkl')
+        name=os.path.join(self.results_folder,f'comiddata-{joblib.hash(self.comidlist)}.pkl')
         if os.path.exists(name):
             try:
                 with open(name,'rb') as f:
@@ -537,51 +543,7 @@ class DataCollection(myLogger):
                 uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
                 obj.test_results['uncorrected']=[{'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),'yhat_test':uncorr_yhat}]
             
-    """def plotGeoTestData(self):
-        geog=self.modeldict['model_geog']
-        bigger_geog=self.geog_names[self.geog_names.index(geog)-1]
-        try: self.eco
-        except:
-            self.eco=gpd.read_file(self.physio_path)
-            self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
-            null_bool=self.eco.loc[:,geog].isnull()#fix missing sections
-            self.eco[null_bool].loc[:,geog]=self.eco[null_bool].loc[:,bigger_geog]
-            eco_geog=self.eco.dissolve(by=geog)
-            self.eco_geog=eco_geog
-        self.acc_df_dict={};self.geog_acc_df_dict={}  
-        for m_name in self.model_results.keys():
-            data_dict={'nse':[],'pearson':[],geog:[]}
-            for obj in self.comid_modeling_objects:
-                for result_dict in obj.test_results[m_name]:
-                    data_dict['nse'].append(result_dict['test_stats'].nse)
-                    data_dict['pearson'].append(result_dict['test_stats'].nse)
-                    data_dict[geog].append(self.comid_geog_dict[obj.comid][geog])
-            mean_acc_df=pd.DataFrame(data_dict).groupby(geog).mean()
-            #self.acc_df_dict[m_name]=mean_acc_df
-            geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
-            #self.geog_acc_df_dict[m_name]=
-            for metric in ['nse','pearson']:
-                fig=plt.figure(dpi=300,figsize=[9,6])
-                fig.suptitle(f'modeldict:{self.modeldict}')
-                ax=fig.add_subplot(1,1,1)
-                ax.set_title(f'{m_name}_{metric}')
-                pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
-                pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
-                self.add_states(ax)
-                fig.savefig(os.path.join('print',f'accuracy_{m_name}_{metric}.png'))
-        """
-    """        
-    def add_states(self,ax):
-        try: self.eco_clip_states
-        except:
-            states=gpd.read_file(self.states_path)
-            eco_d=self.eco.copy()
-            eco_d['dissolve_field']=1
-            eco_d.dissolve(by='dissolve_field')
-            self.eco_clip_states=gpd.clip(states,eco_d)
-        self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='k')                 
-            
-        """
+   
                 
                 
     def makeDummies(self,df,fit=False):
@@ -603,14 +565,13 @@ class DataCollection(myLogger):
         
 
 class CompareCorrect(myLogger):
-    def __init__(self,):
+    def __init__(self,model_specs=None):
         myLogger.__init__(self,'comparecorrect.log')
         self.dc_list=[]
         self.proc_count=2
         if not os.path.exists('results'):
             os.mkdir('results')
-        if not os.path.exists('print'):
-            os.mkdir('print')
+        
         self.modeldict={
             'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
             'model_geog':'section',
@@ -631,6 +592,19 @@ class CompareCorrect(myLogger):
                 'lin-reg':{'max_poly_deg':3,'fit_intercept':False},
             }
         } 
+        if not model_specs is None:
+            self.modeldict['model_specs']=model_specs
+        self.results_folder=os.path.join('results',f'{joblib.hash(self.modeldict)}')
+        self.modeldict['results_folder']=self.results_folder
+        if not os.path.exists(self.results_folder):
+            os.mkdir(self.results_folder)
+        modeldictpath=os.path.join(self.results_folder,'modeldict.json')
+        with open(modeldictpath,'w') as f:
+            json.dump(self.modeldict,f)
+        printdir=os.path.join(self.results_folder,'print')
+        if not os.path.exists(printdir):
+            os.mkdir(printdir)
+        
         #self.logger=logging.getLogger(__name__)
         clist_df=pd.read_csv('catchments-list-cleaned.csv')
         self.comid_physio=clist_df.drop('comid',axis=1,inplace=False)
@@ -704,7 +678,7 @@ class CompareCorrect(myLogger):
                 if type(self.modeldict['cross_validate']) is dict:
                     fig_name='cv_'+fig_name
                 
-                fig.savefig(os.path.join('print',fig_name))
+                fig.savefig(os.path.join(self.results_folder,'print',fig_name))
                 
             
             
@@ -712,7 +686,8 @@ class CompareCorrect(myLogger):
     def runDataCollection(self,comidlist,modeldict):
         args=[[comid,modeldict] for comid in comidlist]
         save_hash=joblib.hash(args)
-        save_path=os.path.join('results',f'data-collection_{save_hash}')
+        results_folder=modeldict['results_folder']
+        save_path=os.path.join(results_folder,f'data-collection_{save_hash}')
         loaded=False
         if os.path.exists(save_path):
             with open(save_path,'rb') as f:

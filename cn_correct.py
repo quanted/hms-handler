@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from random import shuffle,seed
 import joblib
 from sklearn.pipeline import make_pipeline
-from sklearn.linear_model import LassoCV,LinearRegression
+from sklearn.linear_model import LassoCV,LinearRegression,LassoLarsCV
 from sklearn.preprocessing import StandardScaler,PolynomialFeatures
 from sklearn.model_selection import RepeatedKFold,GridSearchCV,LeaveOneGroupOut
 from sklearn.preprocessing import OneHotEncoder
@@ -63,9 +63,12 @@ class DropConst(BaseEstimator,TransformerMixin):
         return self
     def transform(self,X):
         if type(X) is pd.DataFrame:
-            return X.loc[:,self.unique_>1]
+            xd= X.loc[:,self.unique_>1]
         else:
-            return X[:,self.unique_>1]       
+            xd= X[:,self.unique_>1]
+        if xd.shape[1]==0:
+            xd=pd.DataFrame(np.ones((X.shape[0],1)))
+        return xd
 
 
 
@@ -88,7 +91,9 @@ class PipeWrapper:
             modeled_runoff=x.loc[:,self.modeled_runoff_col]
             zero_idx=modeled_runoff==0
             self.model={}
-            self.model['zero']=PipelineModel(x[zero_idx],y[zero_idx],('lin-reg',{'max_poly_deg':1,'fit_intercept':False},None))
+            xz=x[zero_idx];yz=y[zero_idx]
+            #self.logger.error(f'no cols in xz. x:{x}')
+            self.model['zero']=PipelineModel(xz,yz,('lin-reg',{'max_poly_deg':1,'fit_intercept':False},self.modeldict))
             if x[~zero_idx].shape[0]>0:
                 self.model['nonzero']=PipelineModel(x[~zero_idx],y[~zero_idx],self.model_spec_tup)
             else:
@@ -150,21 +155,53 @@ class NullModel(BaseEstimator,RegressorMixin):
         if len(x.shape)>1:
             return np.mean(x,axis=1)
         return x
+    
+    
+class MakePolyX(BaseEstimator,TransformerMixin):
+    def __init__(self,degree=2,col_name=None,interact=True):
+        self.degree=degree
+        self.col_name=col_name
+        self.interact=interact
+    def fit(self,X,y=None):
+        return self
+    def transform(self,X):
+        if self.col_name is None:
+            x=X.iloc[:,0]
+            self.col_name=x.name
+        else:
+            x=X.loc[:,self.col_name]
+        xlist=[x]
+        for i in range(2,self.degree+1):
+            xlist.append(x**i)
+            xlist[-1].name=f'{self.col_name}^{i}'
+        X_=X.drop(self.col_name,inplace=False,axis=1)
+        if self.interact:
+            i_list=[]
+            for col1 in X_.columns:
+                for ser in xlist:
+                    i_list.append(X_.loc[:,col1]*ser)
+                    i_list[-1].name=f'{col1}_X_{ser.name}'
+            xlist.extend(i_list)
+        xlist.append(X_)
+        return pd.concat(xlist,axis=1,)
+    
 
 class PipelineModel(myLogger):
     def __init__(self,x,y,model_spec_tup):
         myLogger.__init__(self,)
-        model_name,specs,_=model_spec_tup
+        model_name,specs,modeldict=model_spec_tup
+        model_col_name=modeldict['sources']['modeled']
         cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=1)
         if model_name.lower() =='lin-reg':
             deg=specs['max_poly_deg']
             if deg>1:
                 pipe=make_pipeline(
+                MakePolyX(degree=2,col_name=model_col_name,interact=True),
                 StandardScaler(),
-                PolynomialFeatures(include_bias=False),
+                #PolynomialFeatures(include_bias=False,interactions_only=True),
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
-                param_grid={'polynomialfeatures__degree':np.arange(1,deg+1)}
+                param_grid={'makepolyx__degree':np.arange(1,deg+1)}
                 self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=1)
             else:
                 self.pipe=make_pipeline(
@@ -177,12 +214,23 @@ class PipelineModel(myLogger):
             deg=specs['max_poly_deg']
             lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv)
             self.pipe=make_pipeline(
+                MakePolyX(degree=deg,col_name=model_col_name,interact=True),
                 StandardScaler(),
-                PolynomialFeatures(include_bias=False,degree=deg),
+                #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
                 ToFortranOrder(),
-                LassoCV(**lasso_kwargs,n_jobs=1))
+                LassoCV(**lasso_kwargs,n_jobs=2))
             #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
+        elif model_name.lower() in ['lassolars','lassolarscv']:
+            deg=specs['max_poly_deg']
+            lasso_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv)
+            self.pipe=make_pipeline(
+                MakePolyX(degree=deg,col_name=model_col_name,interact=True),
+                StandardScaler(),
+                #PolynomialFeatures(include_bias=False,interaction_only=True),
+                DropConst(),
+                ToFortranOrder(),
+                LassoLarsCV(**lasso_kwargs,n_jobs=1))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
@@ -211,94 +259,9 @@ class PipelineModel(myLogger):
         #dself.uncorrected_test_stats=SeriesCompare(ytest,xtest)
         
 
-    
-    
-    """def make_poly_X(self,x,deg):
-        #X=pd.DataFrame(np.ones(x.shape[0]),columns=['constant'])
-        X=pd.DataFrame()
-        for d in range(1,deg+1):
-            X.loc[:,f'x^{d}']=x.values**d
-        return X"""
-            
 
-    """def make_poly_X(self,x):
-        #X=pd.DataFrame(np.ones(x.shape[0]),columns=['constant'])
-        X=pd.DataFrame()
-        for d in range(1,self.deg+1):
-            X.loc[:,f'x^{d}']=x.values**d
-        return X"""
             
-                
-
-class CatchmentCorrection(myLogger):
-    def __init__(self,comid,modeldict):
-        myLogger.__init__(self,'catchment_correction.log')
-        self.comid=comid
-        self.runoff_df=self.make_runoff_df(comid)
-        self.modeldict=modeldict
-        
-        
-        
-    def make_runoff_df(self,comid):
-        df=get_comid_data(comid)
-        date=df['date']
-        df.index=date
-        df.drop(columns='date',inplace=True)
-        return df
-    
-    def run(self):
-        self.runCorrection()
-        
-        
-    def set_train_test(self,y_df,x_df):
-        train_share=self.modeldict['train_share']
-        n=y_df.shape[0]
-        split_idx=int(train_share*n)
-        x_train=x_df.iloc[:split_idx]
-        y_train=y_df.iloc[:split_idx]
-        x_test=x_df.iloc[split_idx:]
-        y_test=y_df.iloc[split_idx:]
-        return x_train,y_train,x_test,y_test
-    
-    def filter_data(self,y,x,data_filter):
-        if data_filter is None or data_filter.lower()=="none":
-            return y,x
-        if data_filter.lower()=='nonzero':
-            non_zero_idx=np.arange(y.shape[0])[x>0]
-            y=y[non_zero_idx];x=x[non_zero_idx]
-        if data_filter.lower()[:10]=='percentile':
-            assert False, not developed
-        return y,x
-                       
-                       
-    def runCorrection(self):
-        sources=self.modeldict['sources']
-        obs_df=self.runoff_df.loc[:,sources['observed']]
-        mod_df=self.runoff_df.loc[:,sources['modeled']]
-        if mod_df[mod_df>0].shape[0]<100:
-            self.logger.error(f'data problem for comid:{self.comid} mod_df[mod_df>0].shape[0]:{mod_df[mod_df>0].shape[0]} and mod_df.shape:{mod_df.shape}')
-            self.correction_dict={}
-            self.uncorrected_test_stats=None
-            return
-        
-        #data_filter=self.modeldict['filter']
-        #obs_df,mod_df=self.filter_data(obs_df,mod_df,data_filter)
-        
-        if obs_df.shape[0]<32:
-            self.logger.error(f'data problem for comid:{self.comid} obs_df.shape:{obs_df.shape} and mod_df.shape:{mod_df.shape}')
-            self.correction_dict={}
-            self.uncorrected_test_stats=None
-            return
-        
-        x_train,y_train,x_test,y_test=self.set_train_test(obs_df,mod_df)
-        
-        self.correction_dict={}
-        for m_name,mdict in self.modeldict['model_specs'].items():
-            model=PipeWrapper(x_train,y_train,deg=deg,model_spec_tup=(m_name,mdict,self.modeldict))  
-            model.set_test_stats(x_test,y_test)
-            self.correction_dict[f'{m_name}']=model
-        
-        self.uncorrected_test_stats=SeriesCompare(y_test,x_test)
+  
  
 
 class ComidData(myLogger):            
@@ -347,28 +310,6 @@ class ComidData(myLogger):
         self.y_test=y_df.iloc[split_idx:]
  
 
-"""class GroupDFSplitter(myLogger):
-    def __init__(self,n_reps,num_groups=None):
-        myLogger.__init__(self)
-        self.n_reps=n_reps
-        self.num_groups=num_groups
-    def get_df_split(self,groups):
-        self.logger.info(f'groups:{groups}')
-        if type(groups) in [np.ndarray, pd.Series]:
-            groups=pd.DataFrame(groups,columns=['group'])
-        inferred_group_name=groups.columns.to_list()[0]
-        if self.num_groups is None:
-            #self.num_groups=groups.value_counts(subset=inferred_group_name).min()
-        print(f'split leaving one member out grouping:{inferred_group_name}')
-        n=groups.shape[0]
-        for seed in range(self.n_reps):
-            shuf_grp=groups.sample(frac=1,replace=False,random_state=seed)
-            grp=shuf_grp.groupby(by=inferred_group_name).groupby(by='comid'.cumcount()
-            self.logger.info(f'seed:{seed}, grp: {grp}')
-            for i in range(self.num_groups):
-                grp_bool=grp!=pd.Series([i]*n,name=grp.name,index=grp.index)
-                self.logger.info(f'i: {i}, grp_bool:{grp_bool}')
-                yield grp_bool"""
             
 class Runner(myLogger):
     def __init__(self,X,y,m_name,specs,modeldict,train_comids=None,return_save_string=True):
@@ -445,7 +386,8 @@ class DataCollection(myLogger):
         
     def collectComidData(self):
         self.comid_data_object_dict={}
-        name=os.path.join('results','comiddata.pkl')
+        
+        name=os.path.join('results',f'comiddata-{joblib.hash(self.comidlist)}.pkl')
         if os.path.exists(name):
             try:
                 with open(name,'rb') as f:
@@ -468,11 +410,15 @@ class DataCollection(myLogger):
         
     
     def addGeogCols(self,):
-         
+        model_geog=self.modeldict['model_geog']
+        if not type(model_geog) is list:
+            model_geog=[model_geog]
         
         for comid,obj in self.comid_data_object_dict.items():
             geog_dict=self.comid_geog_dict[comid]
-            for col_name,val in geog_dict.items():
+            for col_name in model_geog:
+                val=geog_dict[col_name]
+            
                 try:
                     obj.runoff_model_data_df.loc[:,col_name]=val
                 except:
@@ -536,7 +482,7 @@ class DataCollection(myLogger):
                     #self.logger.info(f'cv run_{i} complete')
                     #self.model_results[m_name].append(model)
                 self.logger.info(f'starting multiproc Runners for {m_name}')
-                results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_list,proc_count=1)
+                results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_list,proc_count=5)
                 self.model_results[m_name].extend([result.model for result in results])
                 self.logger.info(f'Runners complete for {m_name}')
      
@@ -570,6 +516,7 @@ class DataCollection(myLogger):
                                                                  
     def runTestData(self):
         for m_name,model_list in self.model_results.items():
+            self.logger.info(f'building test data/stats for {m_name}')
             if not self.modeldict['cross_validate']: 
                 if not type(model_list) is list:model_list=[model_list]
             for model in model_list:
@@ -590,7 +537,7 @@ class DataCollection(myLogger):
                 uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
                 obj.test_results['uncorrected']=[{'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),'yhat_test':uncorr_yhat}]
             
-    def plotGeoTestData(self):
+    """def plotGeoTestData(self):
         geog=self.modeldict['model_geog']
         bigger_geog=self.geog_names[self.geog_names.index(geog)-1]
         try: self.eco
@@ -622,8 +569,8 @@ class DataCollection(myLogger):
                 pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
                 self.add_states(ax)
                 fig.savefig(os.path.join('print',f'accuracy_{m_name}_{metric}.png'))
-        
-            
+        """
+    """        
     def add_states(self,ax):
         try: self.eco_clip_states
         except:
@@ -634,7 +581,7 @@ class DataCollection(myLogger):
             self.eco_clip_states=gpd.clip(states,eco_d)
         self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='k')                 
             
-        
+        """
                 
                 
     def makeDummies(self,df,fit=False):
@@ -658,6 +605,7 @@ class DataCollection(myLogger):
 class CompareCorrect(myLogger):
     def __init__(self,):
         myLogger.__init__(self,'comparecorrect.log')
+        self.dc_list=[]
         self.proc_count=2
         if not os.path.exists('results'):
             os.mkdir('results')
@@ -670,7 +618,7 @@ class CompareCorrect(myLogger):
             'filter':'nonzero',#'none',#'nonzero'
             'train_share':0.80,
             'split_order':'chronological',#'random'
-            'model_scale':'conus',#'comid'
+            'model_scale':'division',#'comid'
             'model_specs':{
                 #no intercept b/c no dummy drop
                 #'lasso':{'max_poly_deg':3,'fit_intercept':False},
@@ -698,34 +646,96 @@ class CompareCorrect(myLogger):
         if not os.path.exists(self.physio_path):
             print(f'cannot locate {self.physio_path}, the physiographic boundary shapefile. download it and unzip it in a folder called "ecoregions".')
         self.states_path='geo_data/states/cb_2017_us_state_500k.dbf'
+        self.comid_geog_dict=self.makeComidGeogDict()
     
     
     def runBigModel(self,):
-        args=[[comid,self.modeldict] for comid in self.comidlist]
+        model_scale=self.modeldict['model_scale']
+        if model_scale.lower()=='conus':
+            dc=self.runDataCollection(self.comidlist,self.modeldict)
+            #dc.plotGeoTestData()
+        elif model_scale.lower() in self.geog_names:
+            geog_comidlist_dict={}
+            for comid,cg_dict in self.comid_geog_dict.items():
+                g=cg_dict[model_scale]
+                if not g in geog_comidlist_dict:
+                    geog_comidlist_dict[g]=[]
+                geog_comidlist_dict[g].append(comid)
+            for geog,comidlist in geog_comidlist_dict.items():
+                modeldict=self.modeldict.copy()
+                modeldict['model_scale']=(model_scale,geog)
+                self.dc_list.append(self.runDataCollection(comidlist,modeldict))
+                
+    def plotGeoTestData(self,):
+        geog=self.modeldict['model_geog']
+        bigger_geog=self.geog_names[self.geog_names.index(geog)-1]
+        try: self.eco
+        except:
+            self.eco=gpd.read_file(self.physio_path)
+            self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
+            null_bool=self.eco.loc[:,geog].isnull()#fix missing sections
+            self.eco[null_bool].loc[:,geog]=self.eco[null_bool].loc[:,bigger_geog]
+            eco_geog=self.eco.dissolve(by=geog)
+            self.eco_geog=eco_geog
+        data_dict={}
+        for dc in self.dc_list:
+            for m_name in dc.model_results.keys():
+                if not m_name in data_dict:
+                    data_dict[m_name]={'nse':[],'pearson':[],geog:[]}
+                    
+                for obj in dc.comid_modeling_objects:
+                    for result_dict in obj.test_results[m_name]:
+                        data_dict[m_name]['nse'].append(result_dict['test_stats'].nse)
+                        data_dict[m_name]['pearson'].append(result_dict['test_stats'].nse)
+                        data_dict[m_name][geog].append(self.comid_geog_dict[obj.comid][geog])
+                        
+        for m_name,m_data_dict in data_dict.items():            
+            mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
+            geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
+            for metric in ['nse','pearson']:
+                fig=plt.figure(dpi=300,figsize=[9,6])
+                fig.suptitle(f'modeldict:{self.modeldict}')
+                ax=fig.add_subplot(1,1,1)
+                ax.set_title(f'{m_name}_{metric}')
+                pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
+                pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
+                self.add_states(ax)
+                fig_name=f'{self.modeldict["model_scale"]}_{m_name}_{metric}.png'
+                if type(self.modeldict['cross_validate']) is dict:
+                    fig_name='cv_'+fig_name
+                
+                fig.savefig(os.path.join('print',fig_name))
+                
+            
+            
+            
+    def runDataCollection(self,comidlist,modeldict):
+        args=[[comid,modeldict] for comid in comidlist]
         save_hash=joblib.hash(args)
         save_path=os.path.join('results',f'data-collection_{save_hash}')
         loaded=False
         if os.path.exists(save_path):
             with open(save_path,'rb') as f:
-                self.dc=pickle.load(f)
-            loaded=True
+                dc=pickle.load(f)
+            return dc
         else:
             print('running big model')
-        if not loaded:
-            self.dc=DataCollection(self.comidlist,self.modeldict,self.makeComidGeogDict())
-            self.dc.build()
-            self.dc.runModel()
-            self.dc.runTestData()
-            with open(save_path,'wb') as f:
-                pickle.dump(self.dc,f)
-        self.dc.plotGeoTestData()
-        
-    def makeComidGeogDict(self):
-        geog=self.modeldict['model_geog']
-        if not type(geog) is list:
-            geogs=[geog]
+        if len(comidlist)<len(self.comidlist):
+            comid_geog_dict={comid:geog for comid,geog in self.comid_geog_dict.items() if comid in comidlist}
         else:
-            geogs=geog
+            comid_geog_dict=self.comid_geog_dict
+        dc=DataCollection(comidlist,modeldict,self.comid_geog_dict)
+        dc.build()
+        dc.runModel()
+        dc.runTestData()
+        with open(save_path,'wb') as f:
+            pickle.dump(dc,f)
+        return dc
+    
+    
+        
+    def makeComidGeogDict(self,geogs=None):
+        if geogs is None:geogs=self.geog_names
         comid_geog_dict={}
         
         for comid in self.comidlist:
@@ -741,82 +751,7 @@ class CompareCorrect(myLogger):
                     assert False,'not developed'
         return comid_geog_dict
     
-    def makeAccuracyDF(self,):
-        self.runModelCorrection(try_load=True)
-        prefix=f"{self.modeldict['sources']['observed']}_{self.modeldict['filter']}_"
-        nse_key=prefix+'nse'
-        pear_key=prefix+'pearsons'
-        data_dict={nse_key:[],pear_key:[]}
-        idx_tup_list=[]
-        #idx=[]
-        for obj in self.comid_obj_list:
-            comid=obj.comid
-            if len(obj.correction_dict)==0:
-                self.logger.warning(f'no results for comid:{comid}')
-                continue
-            for model_name,model in obj.correction_dict.items():
-                idx_tup_list.append((comid,model_name))
-                #idx.append(comid)
-                stats=model.poly_test_stats
-                data_dict[nse_key].append(stats.nse)
-                data_dict[pear_key].append(stats.pearsons)
-            data_dict[nse_key].append(obj.uncorrected_test_stats.nse)
-            data_dict[pear_key].append(obj.uncorrected_test_stats.pearsons)
-            idx_tup_list.append((comid,'uncorrected'))
-        midx=pd.MultiIndex.from_tuples(idx_tup_list,names=['comid','model_name'])
-        self.accuracy_df=pd.DataFrame(data_dict,index=midx)
-            
-    def plotAccuracyDF(self,model_spec={'lasso':{'max_poly_deg':5}},geography='section'):
-        try: self.eco
-        except:
-            self.eco=gpd.read_file(self.physio_path)
-            self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
-        try: self.accuracy_df
-        except: self.makeAccuracyDF()
-        model_name_list=self.accuracy_df.index.get_level_values('model_name').unique()
-        if not model_name in model_name_list:
-            found=False
-            for model in model_n in model_name_list:
-                if re.search(model_name,model_n):
-                    self.logger.info(f'model_name:{model_name} not found. plotting {model_n} instead')
-                    model_name=model_n
-                    found=True
-                    break
-            if not found:
-                model_self.logger.critical(f'model_name:{model_name} not found, nothing similar found')
-                return
-            
-        model_accuracy_df=self.accuracy_df.loc[(slice(None),model_name),:]
-        model_accuracy_df.index=model_accuracy_df.index.droplevel(level='model_name')
-        self.model_accuracy_df=model_accuracy_df
-        
-        
-        acc=model_accuracy_df.merge(self.comid_physio,on='comid')
-        self.acc=acc
-        for col in self.geog_names:
-            if col!=geography:
-                acc.drop(col,axis=1,inplace=True)
-        model_accuracy_df_geog_mean=acc.groupby(geography).mean()
-        self.model_accuracy_df_geog_mean=model_accuracy_df_geog_mean
-        
-        eco_geog=self.eco.dissolve(by=geography)
-        self.eco_geog=eco_geog
-        #eco_geog.index=[idx.lower() for idx in eco_geog.index.to_list()]
-        eco_geog_data=eco_geog.merge(model_accuracy_df_geog_mean,on=geography)
-        self.eco_geog_data=eco_geog_data
-        for col in model_accuracy_df.columns:
-            fig=plt.figure(dpi=300,figsize=[12,6])
-            fig.suptitle(f'modeldict:{self.modeldict}')
-            
-            ax=fig.add_subplot(1,1,1)
-
-            ax.set_title(f'{model_name}_{col}')
-            pos_eco_geog_data=eco_geog_data[eco_geog_data.loc[:,col]>0]
-            pos_eco_geog_data.plot(column=col,ax=ax,cmap='plasma',legend=True,)
-            #self.param_gdf.boundary.plot(ax=ax,edgecolor='w',linewidth=1)
-            self.add_states(ax)
-            fig.savefig(os.path.join('print',f'accuracy_{model_name}_{col}.png'))
-        #ax.legend()
+    
         
         
     def add_states(self,ax):
@@ -829,39 +764,7 @@ class CompareCorrect(myLogger):
             self.eco_clip_states=gpd.clip(states,eco_d)
         self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='k')                
     
-    def runModelCorrection(self,try_load=False):
-        args=[[comid,self.modeldict] for comid in self.comidlist]
-        save_hash=joblib.hash(args)
-        save_path=os.path.join('results',f'comid_correction_list_hash-{save_hash}')
-        if try_load:
-            if os.path.exists(save_path):
-                with open(save_path,'rb') as f:
-                    comid_obj_list=pickle.load(f)
-                if len(comid_obj_list)==len(self.comidlist):
-                    self.logger.info(f'load complete for {save_path}')
-                    self.comid_obj_list=comid_obj_list
-                else:
-                    assert False,f'save_path:{save_path} has wrong length'
-                    self.comid_obj_list_err=comid_obj_list
-                return
-            else:
-                self.logger.debug('no file to load')
-        else:
-            assert not os.path.exists(save_path),f'save_path:{save_path} already exists, halting'                            
-        comid_obj_list=MpHelper().runAsMultiProc(CatchmentCorrection,args,proc_count=self.proc_count)
-        self.comid_obj_list=comid_obj_list
-        
-        with open(save_path,'wb') as f:
-            pickle.dump(comid_obj_list,f)
-            
-    def build_test_metric_df(self):
-        assert self.comid_obj_list,'runModelCorrection must be run first'
-        correction_dict_list=[]
-        uncorrected_test_stats_list=[]
-        for o,obj in enumerate(self.comid_obj_list):
-            assert self.comidlist[o]==obj.comid,f'comid mismatch!!!'
-            correction_dict_list.append(obj.correction_dict)
-            uncorrected_test_stats_list.append(obj.uncorrected_test_stats)
+    
    
         
 if __name__=="__main__":

@@ -11,8 +11,8 @@ if __name__=='__main__':
                 #'subsample':1,
                 #'max_depth':3
                 }},
-        {'lin-reg':{'max_poly_deg':3,'fit_intercept':False}},
-        {'lasso':{'max_poly_deg':3,'fit_intercept':False}},
+        {'lin-reg':{'max_poly_deg':5,'fit_intercept':False}},
+        {'lasso':{'max_poly_deg':5,'fit_intercept':False}},
         
         
     ]
@@ -22,6 +22,7 @@ if __name__=='__main__':
             cc.modeldict['model_specs']=model_spec
             print('modeldict',cc.modeldict)
             cc.runBigModel()
+            cc.plotGeoTestData()
             print('complete')
         except:
             print(format_exc())

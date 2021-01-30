@@ -35,11 +35,21 @@ class MpHelper(myLogger):
     def runAsMultiProc(self,mp_object,args_list,proc_count=4,kwargs_list={},):
         try:
             starttime=time()
-            q=Queue()
-            jobq=Queue()
             I=len(args_list)
             if type(kwargs_list) is dict:
                 kwargs_list=[kwargs_list]*I
+            if proc_count==1:
+                self.logger.info(f'proc_count: {proc_count}, so no mp for obj type: {type(mp_object)}')
+                outlist=[]
+                for i in range(I):
+                    outlist.append(mp_object(*args_list[i],**kwargs_list[i]))
+                    outlist[-1].run()
+                return outlist
+            
+            q=Queue()
+            jobq=Queue()
+            
+            
             #q_args_list=[[q,i,*args_list[i]] for i in range(I)]
             for i in range(I):
                 jobq.put({'i':i,'args':args_list[i],'kwargs':kwargs_list[i]})

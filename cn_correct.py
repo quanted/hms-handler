@@ -6,6 +6,7 @@ import re
 import os
 import logging
 import matplotlib.pyplot as plt
+from matplotlib.colors import TwoSlopeNorm
 from random import shuffle,seed
 import joblib
 from sklearn.pipeline import make_pipeline
@@ -200,7 +201,7 @@ class PipelineModel(myLogger):
             deg=specs['max_poly_deg']
             if deg>1:
                 pipe=make_pipeline(
-                MakePolyX(degree=2,col_name=model_col_name,interact=True),
+                MakePolyX(degree=2,col_name=model_col_name,interact=True,no_constant=True),
                 StandardScaler(),
                 #PolynomialFeatures(include_bias=False,interactions_only=True),
                 DropConst(),       
@@ -218,7 +219,7 @@ class PipelineModel(myLogger):
             deg=specs['max_poly_deg']
             lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv)
             self.pipe=make_pipeline(
-                MakePolyX(degree=deg,col_name=model_col_name,interact=True),
+                MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
                 StandardScaler(),
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
@@ -229,7 +230,7 @@ class PipelineModel(myLogger):
             deg=specs['max_poly_deg']
             lasso_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv)
             self.pipe=make_pipeline(
-                MakePolyX(degree=deg,col_name=model_col_name,interact=True),
+                MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
                 StandardScaler(),
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
@@ -647,8 +648,7 @@ class CompareCorrect(myLogger):
         except:
             self.eco=gpd.read_file(self.physio_path)
             self.eco.columns=[col.lower() for col in self.eco.columns.to_list()]
-            null_bool=self.eco.loc[:,geog].isnull()#fix missing sections
-            self.eco[null_bool].loc[:,geog]=self.eco[null_bool].loc[:,bigger_geog]
+            self.eco.loc[:,geog].fillna(self.eco.loc[:,bigger_geog],inplace=True)
             eco_geog=self.eco.dissolve(by=geog)
             self.eco_geog=eco_geog
         data_dict={}
@@ -668,11 +668,19 @@ class CompareCorrect(myLogger):
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
             for metric in ['nse','pearson']:
                 fig=plt.figure(dpi=300,figsize=[9,6])
+                fig.patch.set_facecolor('w')
                 fig.suptitle(f'modeldict:{self.modeldict}')
                 ax=fig.add_subplot(1,1,1)
                 ax.set_title(f'{m_name}_{metric}')
-                pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
-                pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
+                eco_geog.plot(color='lightgrey')
+                #pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
+                #pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
+                norm = TwoSlopeNorm(vmin=-1,vcenter=0, vmax=1)
+                cmap='RdBu'#'brg'##'plasma'
+                cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+                self.geog_acc_df=geog_acc_df
+                geog_acc_df.plot(column=metric,ax=ax, cmap=cmap, norm=norm,legend=False,)
+                fig.colorbar(cbar, ax=ax)
                 self.add_states(ax)
                 fig_name=f'{self.modeldict["model_scale"]}_{m_name}_{metric}.png'
                 if type(self.modeldict['cross_validate']) is dict:

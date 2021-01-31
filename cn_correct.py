@@ -197,6 +197,7 @@ class PipelineModel(myLogger):
         model_name,specs,modeldict=model_spec_tup
         model_col_name=modeldict['sources']['modeled']
         if 'inner_cv' in specs:
+            inner_cv=specs['inner_cv']
             n_repeats=inner_cv['n_repeats'];n_splits=inner_cv['n_splits']
             n_jobs=inner_cv['n_jobs']
         else:
@@ -466,7 +467,7 @@ class DataCollection(myLogger):
             obj.x_test_float=self.makeDummies(obj.x_test,fit=False)
     
     def runModel(self): #singular!
-        scale=selfmodeldict['model_scale']
+        model_scale=self.modeldict['model_scale']
         if model_scale=='conus':
             proc_count=1
         else:
@@ -600,14 +601,14 @@ class CompareCorrect(myLogger):
             'model_scale':'division',#'division',#'comid'
             'model_specs':{
                 #no intercept b/c no dummy drop
-                'lasso':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs'=1}}},
+                'lasso':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
                 'gbr':{
                     'kwargs':{},#these pass through to sklearn's gbr
                     #'n_estimators':10000,
                     #'subsample':1,
                     #'max_depth':3
                 },
-                'lin-reg':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs=1'}},
+                'lin-reg':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
             }
         } 
         if not model_specs is None:

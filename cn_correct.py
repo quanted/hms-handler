@@ -14,7 +14,7 @@ from sklearn.linear_model import LassoCV,LinearRegression,LassoLarsCV
 from sklearn.preprocessing import StandardScaler,PolynomialFeatures
 from sklearn.model_selection import RepeatedKFold,GridSearchCV,LeaveOneGroupOut
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import GradientBoostingRegressor,StackingRegressor
 from sklearn.base import BaseEstimator, TransformerMixin,RegressorMixin
 from scipy.stats import pearsonr
 from multiprocessing import Process,Queue
@@ -23,6 +23,7 @@ from data_analysis import get_comid_data
 from mp_helper import MpHelper,MpWrapper
 from collections import Counter
 from time import time
+from copy import deepcopy
 
 
 
@@ -261,9 +262,19 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
                 self.pipe_=GridSearchCV(reg,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
             else:
                 self.pipe_=reg 
-        elif model_name.lower()=='stacked':
+        elif model_name.lower() in ['stackingregressor','stacking-regressor']:
             stack_specs=specs['stack_specs']
-            pipes=
+            pipe_list=[]
+            for spec in stack_specs:
+                new_modeldict=deepcopy(modeldict)
+                new_modeldict['model_specs']=spec
+                new_model_spec_tup=(spec[0],spec[1],new_modeldict)
+                model_spec_tup[0]=
+                model_spec_tup[1]=spec[1]
+                pipelist.append(PipelineModel(new_model_spec_tup))
+            cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
+            self.pipe_=StackingRegressor(pipelist,cv=cv,n_jobs=n_jobs)
+                
         else:
             assert False,'model_name not recognized'
         try:

@@ -196,27 +196,33 @@ class PipelineModel(myLogger):
         myLogger.__init__(self,)
         model_name,specs,modeldict=model_spec_tup
         model_col_name=modeldict['sources']['modeled']
-        cv=RepeatedKFold(random_state=0,n_splits=10,n_repeats=3)
+        if 'inner_cv' in specs:
+            n_repeats=inner_cv['n_repeats'];n_splits=inner_cv['n_splits']
+            n_jobs=inner_cv['n_jobs']
+        else:
+            n_repeats=3;n_splits=10;n_jobs=1
+        
+        
         if model_name.lower() =='lin-reg':
             deg=specs['max_poly_deg']
             if deg>1:
                 pipe=make_pipeline(
                 MakePolyX(degree=2,col_name=model_col_name,interact=True,no_constant=True),
                 StandardScaler(),
-                #PolynomialFeatures(include_bias=False,interactions_only=True),
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
                 param_grid={'makepolyx__degree':np.arange(1,deg+1)}
-                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=1)
+                cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
+                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
             else:
                 self.pipe=make_pipeline(
                 StandardScaler(),
-                #PolynomialFeatures(include_bias=False),
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
             #self.pipe.fit(x,y)
-        elif model_name.lower() in ['l1','lasso']:
+        elif model_name.lower() in ['l1','lasso','lassocv']:
             deg=specs['max_poly_deg']
+            cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
             lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv)
             self.pipe=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
@@ -224,10 +230,11 @@ class PipelineModel(myLogger):
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
                 ToFortranOrder(),
-                LassoCV(**lasso_kwargs,n_jobs=2))
+                LassoCV(**lasso_kwargs,n_jobs=n_jobs))
             #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower() in ['lassolars','lassolarscv']:
             deg=specs['max_poly_deg']
+            cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
             lasso_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv)
             self.pipe=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
@@ -235,16 +242,19 @@ class PipelineModel(myLogger):
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
                 ToFortranOrder(),
-                LassoLarsCV(**lasso_kwargs,n_jobs=1))
+                LassoLarsCV(**lasso_kwargs,n_jobs=n_jobs))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
             else:kwargs={}
-                
-            self.pipe=GradientBoostingRegressor(random_state=0,**kwargs)    
-            param_grid={'max_depth':list(range(3,5)),
-                       'n_estimators':[100,500]
-                       }
+            reg=GradientBoostingRegressor(random_state=0,**kwargs)
+            if 'param_grid' in specs:
+                cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
+                param_grid=specs['param_grid']
+                self.pipe=GridSearchCV(reg,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
+            else:
+                self.pipe=reg 
+            
             
             #self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=4)
             #self.pipe.fit(x,y)
@@ -270,18 +280,21 @@ class PipelineModel(myLogger):
  
 
 class ComidData(myLogger):            
-    def __init__(self,comid,sources):
+    def __init__(self,comid,modeldict):
         myLogger.__init__(self,'catchment_data.log')
         self.comid=comid
-        self.sources=sources
+        self.sources=modeldict['sources']
+        self.modeldict=modeldict
         self.runoff_df=self.make_runoff_df(comid,multi_index=True) 
         #self.modeldict=modeldict  
         
         #sources=self.modeldict['sources']
-        obs_src=sources['observed']
-        mod_src=sources['modeled']
+        obs_src=self.sources['observed']
+        mod_src=self.sources['modeled']
         self.runoff_model_data_df=self.runoff_df.loc[:,[obs_src,mod_src]]
-        nonzero=self.runoff_model_data_df.loc[:,mod_src]>0
+        n=self.runoff_model_data_df.shape[0]
+        split_idx=int(self.modeldict['train_share']*n)
+        nonzero=self.runoff_model_data_df.loc[:,mod_src].iloc[:split_idx]>0
         self.nonzero_count=nonzero.shape[0] 
         self.test_results={} # will contain {m_name:{test_stats:...,yhat_test:...}}
         
@@ -301,9 +314,9 @@ class ComidData(myLogger):
         
         return df     
     
-    def set_train_test(self,train_share):
+    def set_train_test(self,):
         df=self.runoff_model_data_df
-        #train_share=self.modeldict['train_share']
+        train_share=self.modeldict['train_share']
         n=df.shape[0]
         split_idx=int(train_share*n)
         y_df=df.loc[:,self.sources['observed']]
@@ -404,7 +417,7 @@ class DataCollection(myLogger):
                 print('load failed, building comiddata')
             
         for comid in self.comidlist:
-            comid_data_obj=ComidData(comid,self.modeldict['sources'])
+            comid_data_obj=ComidData(comid,self.modeldict)
             if comid_data_obj.nonzero_count>32:
                 self.comid_data_object_dict[comid]=comid_data_obj
             else:
@@ -433,9 +446,8 @@ class DataCollection(myLogger):
                     assert False,f'comid:{comid},col_name:{col_name},val:{val}.'
     
     def setComidTrainTest(self):
-        train_share=self.modeldict['train_share']
         for comid,obj in self.comid_data_object_dict.items():
-            obj.set_train_test(train_share)
+            obj.set_train_test()
 
     def assembleTrainDFs(self):
         self.comid_modeling_objects=[]
@@ -454,6 +466,11 @@ class DataCollection(myLogger):
             obj.x_test_float=self.makeDummies(obj.x_test,fit=False)
     
     def runModel(self): #singular!
+        scale=selfmodeldict['model_scale']
+        if model_scale=='conus':
+            proc_count=1
+        else:
+            proc_count=6
         X=self.big_x_train
         y=self.big_y_train
         self.model_results={}
@@ -489,7 +506,7 @@ class DataCollection(myLogger):
                     #self.logger.info(f'cv run_{i} complete')
                     #self.model_results[m_name].append(model)
                 self.logger.info(f'starting multiproc Runners for {m_name}')
-                results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_list,proc_count=5)
+                results=MpHelper().runAsMultiProc(Runner,args_list,kwargs_list=kwargs_list,proc_count=proc_count)
                 self.model_results[m_name].extend([result.model for result in results])
                 self.logger.info(f'Runners complete for {m_name}')
      
@@ -578,19 +595,19 @@ class CompareCorrect(myLogger):
             'model_geog':'section',
             'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
             'filter':'nonzero',#'none',#'nonzero'
-            'train_share':0.80,
+            'train_share':0.50,
             'split_order':'chronological',#'random'
-            'model_scale':'division',#'comid'
+            'model_scale':'division',#'division',#'comid'
             'model_specs':{
                 #no intercept b/c no dummy drop
-                #'lasso':{'max_poly_deg':3,'fit_intercept':False},
+                'lasso':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs'=1}}},
                 'gbr':{
                     'kwargs':{},#these pass through to sklearn's gbr
                     #'n_estimators':10000,
                     #'subsample':1,
                     #'max_depth':3
                 },
-                'lin-reg':{'max_poly_deg':3,'fit_intercept':False},
+                'lin-reg':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs=1'}},
             }
         } 
         if not model_specs is None:
@@ -667,12 +684,13 @@ class CompareCorrect(myLogger):
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
             for metric in ['nse','pearson']:
+                plt.rcParams['axes.facecolor'] = 'lightgrey'
                 fig=plt.figure(dpi=300,figsize=[9,6])
                 fig.patch.set_facecolor('w')
                 fig.suptitle(f'modeldict:{self.modeldict}')
                 ax=fig.add_subplot(1,1,1)
                 ax.set_title(f'{m_name}_{metric}')
-                #eco_geog.plot(color='lightgrey')
+                eco_geog.plot(color='darkgrey',ax=ax)
                 #pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
                 #pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
                 norm = TwoSlopeNorm(vmin=-1,vcenter=0, vmax=1)

@@ -46,9 +46,9 @@ class ToFortranOrder(BaseEstimator,TransformerMixin):
         return self
     def transform(self,X):
         if type(X) is pd.DataFrame or type(X) is pd.Series:
-            return np.asfortranarray(X.to_numpy(),dtype=np.float32)
+            return np.asfortranarray(X.to_numpy())
         else:
-            return np.asfortranarray(X,dtype=np.float32)
+            return np.asfortranarray(X)
     
 
 class DropConst(BaseEstimator,TransformerMixin):
@@ -255,13 +255,14 @@ class PipelineModel(myLogger):
                 self.pipe=GridSearchCV(reg,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
             else:
                 self.pipe=reg 
-            
-            
-            #self.pipe=GridSearchCV(GradientBoostingRegressor(random_state=0,**kwargs),param_grid=param_grid,cv=cv,n_jobs=4)
-            #self.pipe.fit(x,y)
         else:
             assert False,'model_name not recognized'
-        self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
+        try:
+            self.pipe.fit(x,y)
+            #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
+        except:
+            self.logger.exception(f'fit error. x.shape:{x.shape}, y.shape:{y.shape}, x: {x}, y: {y}')
+            assert False, 'fit error!!!'
         #self.logger.info(f'fit complete, starting yhat_train prediction')
         #self.yhat_train=pd.DataFrame(self.pipe.predict(x),index=x.index,columns=['yhat'])
         #self.logger.info(f'yhat_train prediction complete.')

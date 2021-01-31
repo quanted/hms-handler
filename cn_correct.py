@@ -87,18 +87,21 @@ class PipeWrapper:
         self.modeled_runoff_col=self.modeldict['sources']['modeled']
         self.data_filter=self.modeldict['filter']
         if self.data_filter == 'none':
-            self.model=PipelineModel(data_dict,self.model_spec_tup)
+            self.model=PipelineModel(self.model_spec_tup)
+            self.model.fit(x,y)
         elif self.data_filter == 'nonzero':
             modeled_runoff=x.loc[:,self.modeled_runoff_col]
             zero_idx=modeled_runoff==0
             self.model={}
             xz=x[zero_idx];yz=y[zero_idx]
             #self.logger.error(f'no cols in xz. x:{x}')
-            self.model['zero']=PipelineModel(xz,yz,('lin-reg',{'max_poly_deg':1,'fit_intercept':False},self.modeldict))
+            self.model['zero']=PipelineModel(('lin-reg',{'max_poly_deg':1,'fit_intercept':False},self.modeldict))
+            self.model['zero'].fit(xz,yz)
             if x[~zero_idx].shape[0]>0:
-                self.model['nonzero']=PipelineModel(x[~zero_idx],y[~zero_idx],self.model_spec_tup)
+                self.model['nonzero']=PipelineModel(self.model_spec_tup)
             else:
                 self.model['nonzero']=NullModel()
+            self.model['nonzero'].fit(x[~zero_idx],y[~zero_idx])
         else:assert False,f'self.data_filter:{self.data_filter} not developed'
             
             
@@ -191,10 +194,13 @@ class MakePolyX(BaseEstimator,TransformerMixin):
         return pd.concat(xlist,axis=1,)
     
 
-class PipelineModel(myLogger):
-    def __init__(self,x,y,model_spec_tup):
+class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
+    def __init__(self,model_spec_tup):
+        self.model_spec_tup=model_spec_tup
         myLogger.__init__(self,)
-        model_name,specs,modeldict=model_spec_tup
+        
+    def fit(self,x,y):    
+        model_name,specs,modeldict=self.model_spec_tup
         model_col_name=modeldict['sources']['modeled']
         if 'inner_cv' in specs:
             inner_cv=specs['inner_cv']
@@ -214,30 +220,30 @@ class PipelineModel(myLogger):
                 LinearRegression(fit_intercept=specs['fit_intercept']))
                 param_grid={'makepolyx__degree':np.arange(1,deg+1)}
                 cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
-                self.pipe=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
+                self.pipe_=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
             else:
-                self.pipe=make_pipeline(
+                self.pipe_=make_pipeline(
                 StandardScaler(),
                 DropConst(),       
                 LinearRegression(fit_intercept=specs['fit_intercept']))
-            #self.pipe.fit(x,y)
+            #self.pipe_.fit(x,y)
         elif model_name.lower() in ['l1','lasso','lassocv']:
             deg=specs['max_poly_deg']
             cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
             lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv)
-            self.pipe=make_pipeline(
+            self.pipe_=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
                 StandardScaler(),
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
                 ToFortranOrder(),
                 LassoCV(**lasso_kwargs,n_jobs=n_jobs))
-            #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
+            #self.pipe_.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower() in ['lassolars','lassolarscv']:
             deg=specs['max_poly_deg']
             cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
             lasso_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv)
-            self.pipe=make_pipeline(
+            self.pipe_=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
                 StandardScaler(),
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
@@ -252,23 +258,28 @@ class PipelineModel(myLogger):
             if 'param_grid' in specs:
                 cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
                 param_grid=specs['param_grid']
-                self.pipe=GridSearchCV(reg,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
+                self.pipe_=GridSearchCV(reg,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
             else:
-                self.pipe=reg 
+                self.pipe_=reg 
+        elif model_name.lower()=='stacked':
+            stack_specs=specs['stack_specs']
+            pipes=
         else:
             assert False,'model_name not recognized'
         try:
-            self.pipe.fit(x,y)
-            #self.pipe.fit(x.astype(np.float32),y.astype(np.float32))
+            self.pipe_.fit(x,y)
+            #self.pipe_.fit(x.astype(np.float32),y.astype(np.float32))
         except:
             self.logger.exception(f'fit error. x.shape:{x.shape}, y.shape:{y.shape}, x: {x}, y: {y}')
             assert False, 'fit error!!!'
         #self.logger.info(f'fit complete, starting yhat_train prediction')
-        #self.yhat_train=pd.DataFrame(self.pipe.predict(x),index=x.index,columns=['yhat'])
+        #self.yhat_train=pd.DataFrame(self.pipe_.predict(x),index=x.index,columns=['yhat'])
         #self.logger.info(f'yhat_train prediction complete.')
+    
+        return self
             
     def predict(self,x):
-        return self.pipe.predict(x)
+        return self.pipe_.predict(x)
     
     def set_test_stats(self,xtest,ytest):
         self.yhat_test=self.predict(xtest)

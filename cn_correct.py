@@ -6,11 +6,11 @@ import re
 import os
 import logging
 import matplotlib.pyplot as plt
-from matplotlib.colors import TwoSlopeNorm
+from matplotlib.colors import TwoSlopeNorm,Normalize
 from random import shuffle,seed
 import joblib
 from sklearn.pipeline import make_pipeline
-from sklearn.linear_model import LassoCV,LinearRegression,LassoLarsCV
+from sklearn.linear_model import LassoCV,LinearRegression,LassoLarsCV,ElasticNetCV
 from sklearn.preprocessing import StandardScaler,PolynomialFeatures
 from sklearn.model_selection import RepeatedKFold,GridSearchCV,LeaveOneGroupOut
 from sklearn.preprocessing import OneHotEncoder
@@ -218,7 +218,7 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
                 MakePolyX(degree=2,col_name=model_col_name,interact=True,no_constant=True),
                 StandardScaler(),
                 DropConst(),       
-                LinearRegression(fit_intercept=specs['fit_intercept']))
+                LinearRegression(fit_intercept=specs['fit_intercept'],normalize=False))
                 param_grid={'makepolyx__degree':np.arange(1,deg+1)}
                 cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
                 self.pipe_=GridSearchCV(pipe,param_grid=param_grid,cv=cv,n_jobs=n_jobs)
@@ -230,15 +230,18 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
             #self.pipe_.fit(x,y)
         elif model_name.lower() in ['l1','lasso','lassocv']:
             deg=specs['max_poly_deg']
+            if 'n_alphas' in specs:
+                n_alphas=specs['n_alphas']
+            else: n_alphas=100
             cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
-            lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv)
+            lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv,n_alphas=n_alphas)
             self.pipe_=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
                 StandardScaler(),
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
                 ToFortranOrder(),
-                LassoCV(**lasso_kwargs,n_jobs=n_jobs))
+                LassoCV(**lasso_kwargs,n_jobs=n_jobs,normalize=False))
             #self.pipe_.fit(x.astype(np.float32),y.astype(np.float32))
         elif model_name.lower() in ['lassolars','lassolarscv']:
             deg=specs['max_poly_deg']
@@ -250,7 +253,22 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
                 #PolynomialFeatures(include_bias=False,interaction_only=True),
                 DropConst(),
                 ToFortranOrder(),
-                LassoLarsCV(**lasso_kwargs,n_jobs=n_jobs))
+                LassoLarsCV(**lasso_kwargs,n_jobs=n_jobs,normalize=False))
+        elif model_name.lower() in ['elastic net','elastic-net','elasticnet']:
+            deg=specs['max_poly_deg']
+            if 'l1_ratio' in specs:
+                l1_ratio=specs['l1_ratio']
+            else:
+                l1_ratio=list(1-np.logspace(-2,-.03,5))
+            cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
+            enet_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv,l1_ratio=l1_ratio)
+            self.pipe_=make_pipeline(
+                MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=False),
+                StandardScaler(),
+                #PolynomialFeatures(include_bias=False,interaction_only=True),
+                DropConst(),
+                ToFortranOrder(),
+                ElasticNetCV(**enet_kwargs,n_jobs=n_jobs,normalize=False))
         elif model_name.lower()=='gbr':
             if 'kwargs' in specs:
                 kwargs=specs['kwargs']
@@ -493,7 +511,7 @@ class DataCollection(myLogger):
         if model_scale=='conus':
             proc_count=1
         else:
-            proc_count=8
+            proc_count=6
         X=self.big_x_train
         y=self.big_y_train
         self.model_results={}
@@ -602,36 +620,41 @@ class DataCollection(myLogger):
         dum_data=self.onehot.transform(df.loc[:,self.obj_cols])
         dum_df=pd.DataFrame(dum_data,index=df.index,columns=self.encoded_cols)
         return pd.concat([df.loc[:,self.num_cols],dum_df],axis=1)
-        
+
+    
+
+    
         
 
 class CompareCorrect(myLogger):
-    def __init__(self,model_specs=None):
+    def __init__(self,model_specs=None,modeldict=None):
         myLogger.__init__(self,'comparecorrect.log')
         self.dc_list=[]
         if not os.path.exists('results'):
             os.mkdir('results')
-        
-        self.modeldict={
-            'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
-            'model_geog':'section',
-            'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
-            'filter':'nonzero',#'none',#'nonzero'
-            'train_share':0.50,
-            'split_order':'chronological',#'random'
-            'model_scale':'division',#'division',#'comid'
-            'model_specs':{
-                #no intercept b/c no dummy drop
-                'lasso':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
-                'gbr':{
-                    'kwargs':{},#these pass through to sklearn's gbr
-                    #'n_estimators':10000,
-                    #'subsample':1,
-                    #'max_depth':3
-                },
-                'lin-reg':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
-            }
-        } 
+        if modeldict is None:
+            self.modeldict={
+                'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
+                'model_geog':'section',
+                'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
+                'filter':'nonzero',#'none',#'nonzero'
+                'train_share':0.50,
+                'split_order':'chronological',#'random'
+                'model_scale':'division',#'division',#'comid'
+                'model_specs':{
+                    #no intercept b/c no dummy drop
+                    'lasso':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
+                    'gbr':{
+                        'kwargs':{},#these pass through to sklearn's gbr
+                        #'n_estimators':10000,
+                        #'subsample':1,
+                        #'max_depth':3
+                    },
+                    'lin-reg':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
+                }
+            } 
+        else:
+            self.modeldict=modeldict
         if not model_specs is None:
             self.modeldict['model_specs']=model_specs
         self.results_folder=os.path.join('results',f'{joblib.hash(self.modeldict)}')
@@ -694,6 +717,7 @@ class CompareCorrect(myLogger):
             
     def setDCResultsDict(self):
         data_dict={}
+        geog=self.modeldict['model_geog']
         for dc in self.dc_list:
             m_names= list(dc.model_results.keys())+['uncorrected'] #adding b/c in test_results, but not model_results
             for m_name in m_names:
@@ -712,7 +736,7 @@ class CompareCorrect(myLogger):
         except: self.setEcoGeog()
         try: self.dc_results_dict
         except: self.setDCResultsDict()
-        
+        geog=self.modeldict['model_geog']
         for m_name,m_data_dict in self.dc_results_dict.items():            
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
@@ -723,7 +747,7 @@ class CompareCorrect(myLogger):
                 fig.suptitle(f'modeldict:{self.modeldict}')
                 ax=fig.add_subplot(1,1,1)
                 ax.set_title(f'{m_name}_{metric}')
-                eco_geog.plot(color='darkgrey',ax=ax)
+                self.eco_geog.plot(color='darkgrey',ax=ax)
                 #pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
                 #pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
                 if plot_negative:
@@ -733,10 +757,20 @@ class CompareCorrect(myLogger):
                     #self.geog_acc_df=geog_acc_df
                     geog_acc_df.plot(column=metric,ax=ax, cmap=cmap, norm=norm,legend=False,)
                     fig.colorbar(cbar, ax=ax)
+                else:
+                    cmap='plasma'
+                    norm=Normalize(vmin=0,vmax=1)
+                    cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+                    pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
+                    pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',norm=norm,legend=False,)
+                    fig.colorbar(cbar,ax=ax)
                 self.add_states(ax)
                 fig_name=f'{self.modeldict["model_scale"]}_{m_name}_{metric}.png'
+                if not plot_negative:
+                    fig_name='pos-score_'+fig_name
                 if type(self.modeldict['cross_validate']) is dict:
                     fig_name='cv_'+fig_name
+                
                 
                 fig.savefig(os.path.join(self.results_folder,'print',fig_name))
                 
@@ -750,9 +784,12 @@ class CompareCorrect(myLogger):
         save_path=os.path.join(results_folder,f'data-collection_{save_hash}')
         loaded=False
         if os.path.exists(save_path):
-            with open(save_path,'rb') as f:
-                dc=pickle.load(f)
-            return dc
+            try:
+                with open(save_path,'rb') as f:
+                    dc=pickle.load(f)
+                return dc
+            except:
+                self.logger.exception(f'error loading data collection from {save_path} running data collection steps')
         else:
             print('running big model')
         if len(comidlist)<len(self.comidlist):
@@ -799,8 +836,80 @@ class CompareCorrect(myLogger):
             self.eco_clip_states=gpd.clip(states,eco_d)
         self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='k')                
     
-    
+class MultiCorrectionTool(myLogger):
+    ###currently supports picking from multiple model_specs for each geog in the model conditioning level (model_geog)
+    ###future work may pick the best from among other items in modeldict, e.g., model_scale
+    def __init__(self,modeldict=None,model_specs=None):
+        myLogger.__init__(self,'multi-correction-tool.log')
+        if modeldict is None:
+            self.modeldict={
+                'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
+                'model_geog':'section',
+                'sources':{'observed':'nldas','modeled':'cn'}, 
+                'filter':'nonzero',#'none',
+                'train_share':0.50,
+                'split_order':'chronological',#'random'
+                'model_scale':'division',#'division',#'comid'
+                'model_specs':{#these are usually set in the run_multi_correct.py or multi_correct.ipynb files that run MultiCorrectionTool
+                    'lasso':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
+                    'gbr':{'kwargs':{},},
+                    'lin-reg':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
+                }} 
+        else:
+            self.modeldict=modeldict
+        if not model_specs is None:
+            self.modeldict['model_specs']=model_specs
+        self.m_names=list(self.modeldict['model_specs'].keys())
+        assert type(self.modeldict['cross_validate']) is dict,f'expecting a dict for cross_validate but got:{self.modeldict["cross_validate"]}'
+        
+        
+    def runCorrections(self,):
+        self.corrections=[]
+        model_specs=self.modeldict['model_specs']  
+        new_model_dict=self.modeldict.copy()
+        for m_spec_name,m_spec in model_specs.items():
+            new_model_dict['model_specs']={m_spec_name:m_spec}
+            self.corrections.append(CompareCorrect(modeldict=new_model_dict))
+        for cc in self.corrections:
+            cc.runBigModel()
+            cc.plotGeoTestData(plot_negative=False)
+            cc.plotGeoTestData(plot_negative=True) 
+            
+    def sellectCorrection(self,metric='nse'):
+        try:self.corrections
+        except:self.runCorrections()
+        comid_geog_dict=self.corrections[0].comid_geog_dict
+        geogs=[]
+        for comid,geog in comid_geog_dict.items():
+            if type(geog) is list:
+                geogs.extend(geog)
+            else:geogs.append(geog)
+        geogs=dict.fromkeys(geogs)
+        self.geog_model_select_dict={g:{'cc_idx':None,'m_name':None,metric:-np.inf} for g in geogs}
+        for cc_idx,cc in enumerate(self.corrections):
+            try:cc.dc_results_dict
+            except:cc.setDCResultsDict()
+            geog=cc.modeldict['model_geog']
+            for m_name,m_data_dict in cc.dc_results_dict.items():  
+                if m_name=='uncorrected' and cc_idx>0:continue #avoid repeated assessment...
+                mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
+                for row_ser in mean_acc_df.iterrows():
+                    g=row_ser[geog]
+                    this_score=row_ser[metric]
+                    best_score=self.geog_model_select_dict[g][metric]
+                    
+                    if this_score>best_score:
+                        self.geog_model_select_dict[g]={metric:this_score,'cc_idx':cc_idx,'m_name':m_name}
+                    
+     
+                
+                    
+                
+        
+        
+        
+        
    
         
 if __name__=="__main__":
-    assert False,'pickle requires running CompareCorrect.runModelCorrection from another python file'
+    assert False,'pickle requires running CompareCorrect.runModelCorrection from another python file. Try run_multi_correct.py or multi_correct.ipynb'

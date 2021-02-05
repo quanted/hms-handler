@@ -900,8 +900,17 @@ class MultiCorrectionTool(myLogger):
                     
                     if this_score>best_score:
                         self.geog_model_select_dict[g]={metric:this_score,'cc_idx':cc_idx,'m_name':m_name}
+        self.saveCorrectionSelections
                     
-     
+    def saveCorrectionSelections(self):
+        assert: self.geog_model_select_dict,'run the corrections and selection first'
+            
+        geogs=[];selections=[]
+        for geog,select_dict in self.geog_model_select_dict.items():
+            geogs.append(geog)
+            selections.append(select_dict['m_name'])
+        pd.Series(selection,name='best estimator',index=geogs).to_csv(os.path.join('results',f'correction_selection_{joblib.hash(self.geog_model_select_dict)}.csv'))
+        
                 
                     
                 

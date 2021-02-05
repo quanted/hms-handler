@@ -264,16 +264,15 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
                 self.pipe_=reg 
         elif model_name.lower() in ['stackingregressor','stacking-regressor']:
             stack_specs=specs['stack_specs']
-            pipe_list=[]
+            pipelist=[]
             for spec in stack_specs:
+                m_name=list(spec.keys())[0]
+                m_spec=spec[m_name]
                 new_modeldict=deepcopy(modeldict)
                 new_modeldict['model_specs']=spec
-                new_model_spec_tup=(spec[0],spec[1],new_modeldict)
-                model_spec_tup[0]=
-                model_spec_tup[1]=spec[1]
-                pipelist.append(PipelineModel(new_model_spec_tup))
-            cv=RepeatedKFold(random_state=0,n_splits=n_splits,n_repeats=n_repeats)
-            self.pipe_=StackingRegressor(pipelist,cv=cv,n_jobs=n_jobs)
+                new_model_spec_tup=(m_name,m_spec,new_modeldict)
+                pipelist.append((m_name,PipelineModel(new_model_spec_tup)))
+            self.pipe_=StackingRegressor(pipelist,n_jobs=n_jobs)
                 
         else:
             assert False,'model_name not recognized'
@@ -494,7 +493,7 @@ class DataCollection(myLogger):
         if model_scale=='conus':
             proc_count=1
         else:
-            proc_count=6
+            proc_count=8
         X=self.big_x_train
         y=self.big_y_train
         self.model_results={}
@@ -610,7 +609,6 @@ class CompareCorrect(myLogger):
     def __init__(self,model_specs=None):
         myLogger.__init__(self,'comparecorrect.log')
         self.dc_list=[]
-        self.proc_count=2
         if not os.path.exists('results'):
             os.mkdir('results')
         
@@ -681,8 +679,9 @@ class CompareCorrect(myLogger):
                 modeldict=self.modeldict.copy()
                 modeldict['model_scale']=(model_scale,geog)
                 self.dc_list.append(self.runDataCollection(comidlist,modeldict))
-                
-    def plotGeoTestData(self,):
+    
+    
+    def setEcoGeog(self):
         geog=self.modeldict['model_geog']
         bigger_geog=self.geog_names[self.geog_names.index(geog)-1]
         try: self.eco
@@ -692,9 +691,12 @@ class CompareCorrect(myLogger):
             self.eco.loc[:,geog].fillna(self.eco.loc[:,bigger_geog],inplace=True)
             eco_geog=self.eco.dissolve(by=geog)
             self.eco_geog=eco_geog
+            
+    def setDCResultsDict(self):
         data_dict={}
         for dc in self.dc_list:
-            for m_name in dc.model_results.keys():
+            m_names= list(dc.model_results.keys())+['uncorrected'] #adding b/c in test_results, but not model_results
+            for m_name in m_names:
                 if not m_name in data_dict:
                     data_dict[m_name]={'nse':[],'pearson':[],geog:[]}
                     
@@ -703,8 +705,15 @@ class CompareCorrect(myLogger):
                         data_dict[m_name]['nse'].append(result_dict['test_stats'].nse)
                         data_dict[m_name]['pearson'].append(result_dict['test_stats'].nse)
                         data_dict[m_name][geog].append(self.comid_geog_dict[obj.comid][geog])
-                        
-        for m_name,m_data_dict in data_dict.items():            
+        self.dc_results_dict=data_dict
+    
+    def plotGeoTestData(self,plot_negative=True):
+        try: self.eco_geog
+        except: self.setEcoGeog()
+        try: self.dc_results_dict
+        except: self.setDCResultsDict()
+        
+        for m_name,m_data_dict in self.dc_results_dict.items():            
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
             for metric in ['nse','pearson']:
@@ -717,12 +726,13 @@ class CompareCorrect(myLogger):
                 eco_geog.plot(color='darkgrey',ax=ax)
                 #pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
                 #pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
-                norm = TwoSlopeNorm(vmin=-1,vcenter=0, vmax=1)
-                cmap='RdBu'#'brg'##'plasma'
-                cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-                self.geog_acc_df=geog_acc_df
-                geog_acc_df.plot(column=metric,ax=ax, cmap=cmap, norm=norm,legend=False,)
-                fig.colorbar(cbar, ax=ax)
+                if plot_negative:
+                    norm = TwoSlopeNorm(vmin=-1,vcenter=0, vmax=1)
+                    cmap='RdBu'#'brg'##'plasma'
+                    cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+                    #self.geog_acc_df=geog_acc_df
+                    geog_acc_df.plot(column=metric,ax=ax, cmap=cmap, norm=norm,legend=False,)
+                    fig.colorbar(cbar, ax=ax)
                 self.add_states(ax)
                 fig_name=f'{self.modeldict["model_scale"]}_{m_name}_{metric}.png'
                 if type(self.modeldict['cross_validate']) is dict:

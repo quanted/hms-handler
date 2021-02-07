@@ -739,15 +739,15 @@ class CompareCorrect(myLogger):
         geog=self.modeldict['model_geog']
         for m_name,m_data_dict in self.dc_results_dict.items():            
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
-            geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog)
+            geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog,how='left')
             for metric in ['nse','pearson']:
                 plt.rcParams['axes.facecolor'] = 'lightgrey'
                 fig=plt.figure(dpi=300,figsize=[9,6])
                 fig.patch.set_facecolor('w')
                 fig.suptitle(f'modeldict:{self.modeldict}')
                 ax=fig.add_subplot(1,1,1)
-                ax.set_title(f'{m_name}_{metric}')
-                self.eco_geog.plot(color='darkgrey',ax=ax)
+                ax.set_title(f'test data {metric} for {m_name}')
+                self.eco_geog.plot(color='darkgrey',ax=ax,hatch='//')
                 #pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
                 #pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
                 if plot_negative:
@@ -834,13 +834,14 @@ class CompareCorrect(myLogger):
             eco_d['dissolve_field']=1
             eco_d.dissolve(by='dissolve_field')
             self.eco_clip_states=gpd.clip(states,eco_d)
-        self.eco_clip_states.boundary.plot(linewidth=1,ax=ax,color=None,edgecolor='k')                
+        self.eco_clip_states.boundary.plot(linewidth=0.3,ax=ax,color=None,edgecolor='k')                
     
 class MultiCorrectionTool(myLogger):
-    ###currently supports picking from multiple model_specs for each geog in the model conditioning level (model_geog)
+    ###currently supports picking from multiple model_specs (e.g., lin-reg, gbr,...) for each geog in the model conditioning level (model_geog)
     ###future work may pick the best from among other items in modeldict, e.g., model_scale
     def __init__(self,modeldict=None,model_specs=None):
         myLogger.__init__(self,'multi-correction-tool.log')
+        self.selection_metric='nse'
         if modeldict is None:
             self.modeldict={
                 'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
@@ -861,6 +862,7 @@ class MultiCorrectionTool(myLogger):
             self.modeldict['model_specs']=model_specs
         self.m_names=list(self.modeldict['model_specs'].keys())
         assert type(self.modeldict['cross_validate']) is dict,f'expecting a dict for cross_validate but got:{self.modeldict["cross_validate"]}'
+        self.model_geog=self.modeldict['model_geog']
         
         
     def runCorrections(self,):
@@ -872,18 +874,17 @@ class MultiCorrectionTool(myLogger):
             self.corrections.append(CompareCorrect(modeldict=new_model_dict))
         for cc in self.corrections:
             cc.runBigModel()
-            cc.plotGeoTestData(plot_negative=False)
-            cc.plotGeoTestData(plot_negative=True) 
+            #cc.plotGeoTestData(plot_negative=False)
+            #cc.plotGeoTestData(plot_negative=True) 
             
-    def sellectCorrection(self,metric='nse'):
+    def selectCorrections(self):
         try:self.corrections
         except:self.runCorrections()
+        metric=self.selection_metric
         comid_geog_dict=self.corrections[0].comid_geog_dict
         geogs=[]
-        for comid,geog in comid_geog_dict.items():
-            if type(geog) is list:
-                geogs.extend(geog)
-            else:geogs.append(geog)
+        for comid,geogdict in comid_geog_dict.items():
+            geogs.append(geogdict[self.model_geog])
         geogs=dict.fromkeys(geogs)
         self.geog_model_select_dict={g:{'cc_idx':None,'m_name':None,metric:-np.inf} for g in geogs}
         for cc_idx,cc in enumerate(self.corrections):
@@ -892,31 +893,84 @@ class MultiCorrectionTool(myLogger):
             geog=cc.modeldict['model_geog']
             for m_name,m_data_dict in cc.dc_results_dict.items():  
                 if m_name=='uncorrected' and cc_idx>0:continue #avoid repeated assessment...
-                mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
-                for row_ser in mean_acc_df.iterrows():
-                    g=row_ser[geog]
+                mean_acc_df=pd.DataFrame(m_data_dict).groupby(self.model_geog).mean()
+                for g,row_ser in mean_acc_df.iterrows():
+                    #print(f'idx: {idx}, row_ser:{row_ser}')
+                    #g=row_ser[self.model_geog]
                     this_score=row_ser[metric]
                     best_score=self.geog_model_select_dict[g][metric]
                     
                     if this_score>best_score:
                         self.geog_model_select_dict[g]={metric:this_score,'cc_idx':cc_idx,'m_name':m_name}
-        self.saveCorrectionSelections
+        self.saveCorrectionSelectionNames()
                     
-    def saveCorrectionSelections(self):
-        assert: self.geog_model_select_dict,'run the corrections and selection first'
+    def saveCorrectionSelectionTable(self):
+        assert self.geog_model_select_dict,'run the corrections and selection first'
             
-        geogs=[];selections=[]
+        geogs=[];selections=[];accuracies=[]
         for geog,select_dict in self.geog_model_select_dict.items():
             geogs.append(geog)
+            accuracies.append(select_dict[self.selection_metric])
             selections.append(select_dict['m_name'])
-        pd.Series(selection,name='best estimator',index=geogs).to_csv(os.path.join('results',f'correction_selection_{joblib.hash(self.geog_model_select_dict)}.csv'))
+        hash_id=joblib.hash(self.geog_model_select_dict)
+        correction_selection_names=pd.Series(selections,name='best estimator',index=geogs)
+        correction_selection_names.to_csv(os.path.join('results',f'correction_selection_names_{hash_id}.csv'))
+        correction_selection_score=pd.Series({'selected':selections,self.selection_metric:accuracies},name='best estimator',index=geogs)
+        correction_selection_score.to_csv(os.path.join('results',f'correction_selection_score_{hash_id}.csv'))
+    
+    def setCorrectionSelectionAccuracy(self,):
+        geogs=[];accuracies=[]
+        for geog,select_dict in self.geog_model_select_dict.items():
+            geogs.append(geog)
+            accuracies.append(select_dict[self.selection_metric])
+        self.correction_selection_accuracy=pd.DataFrame({self.selection_metric:accuracies,self.model_geog:geogs})
+     
+    
+    
+    def plotGeogHybridAccuracy(self,plot_negative=True):
+        try: self.eco_geog
+        except:
+            try:self.corrections[0].eco_geog
+            except: self.corrections[0].setEcoGeog()      
+            self.eco_geog=self.corrections[0].eco_geog
+        try: self.correction_selection_accuracy
+        except: self.setCorrectionSelectionAccuracy()
+        geog=self.model_geog
+        metric=self.selection_metric
+        hybrid_accuracy_series=self.correction_selection_accuracy#.reset_index(name=geog)
+        hybrid_geog=self.eco_geog.merge(hybrid_accuracy_series,on=geog,how='left')
         
-                
-                    
-                
         
-        
-        
+        plt.rcParams['axes.facecolor'] = 'lightgrey'
+        fig=plt.figure(dpi=300,figsize=[9,6])
+        fig.patch.set_facecolor('w')
+        fig.suptitle(f'modeldict:{self.modeldict}')
+        ax=fig.add_subplot(1,1,1)
+        ax.set_title(f'hybrid_{metric}')
+        self.eco_geog.plot(color='darkgrey',ax=ax,hatch='//')
+        #pos_geog_acc_df=geog_acc_df[geog_acc_df.loc[:,metric]>0]
+        #pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',legend=True,)
+        if plot_negative:
+            norm = TwoSlopeNorm(vmin=-1,vcenter=0, vmax=1)
+            cmap='RdBu'#'brg'##'plasma'
+            cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+            #self.geog_acc_df=geog_acc_df
+            hybrid_geog.plot(column=metric,ax=ax, cmap=cmap, norm=norm,legend=False,)
+            fig.colorbar(cbar, ax=ax)
+        else:
+            cmap='plasma'
+            norm=Normalize(vmin=0,vmax=1)
+            cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+            pos_hybrid_geog=hybrid_geog[hybrid_geog.loc[:,metric]>0]
+            pos_hybrid_geog.plot(column=metric,ax=ax,cmap='plasma',norm=norm,legend=False,)
+            fig.colorbar(cbar,ax=ax)
+        self.corrections[0].add_states(ax)
+        fig_name=f'{self.corrections[0].modeldict["model_scale"]}_hybrid-select_{metric}.png'
+        if not plot_negative:
+            fig_name='pos-score_'+fig_name
+        fig_name='cv_'+fig_name
+
+        fig.savefig(os.path.join('results',fig_name))   
         
    
         

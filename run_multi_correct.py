@@ -42,12 +42,9 @@ if __name__=='__main__':
                 }
             },
         ]
-    model_spec_dict={}
-    for dict_i in model_spec_list:
-        for key,val in dict_i.items():
-            model_spec_dict[key]=val
+
         
-    mct=MCT(model_specs=model_spec_dict)
+    mct=MCT(model_specs=model_spec_list)
     mct.runCorrections()
 
             

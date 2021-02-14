@@ -256,10 +256,15 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
             alphas=list(np.logspace(-5,1.4,n_alphas))
             if 'poly_search' in specs and specs['poly_search']:
                 lasso_kwargs=dict(warm_start=True,fit_intercept=specs['fit_intercept'],selection='random',random_state=0)
+                
                 reg=Lasso(**lasso_kwargs,normalize=False)
             else:
-                lassocv_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv,n_alphas=n_alphas)
-                reg=LassoCV(**lassocv_kwargs,n_jobs=n_jobs,normalize=False)
+                
+                lasso_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'],cv=cv,n_alphas=n_alphas)
+            if 'kwargs' in specs:
+                for key,val in specs['kwargs'].items():
+                    lasso_kwargs[key]=val
+            reg=LassoCV(**lasso_kwargs,n_jobs=n_jobs,normalize=False)
             innerpipe=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=True),
                 DropConst(),
@@ -291,8 +296,8 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
                 ridge_kwargs=dict(random_state=0,fit_intercept=specs['fit_intercept'])
                 reg=Ridge(**ridge_kwargs,normalize=False)
             else:
-                ridgecv_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv,alphas=alphas)
-                reg=RidgeCV(**ridgecv_kwargs,normalize=False)
+                ridge_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv,alphas=alphas)
+                reg=RidgeCV(**ridge_kwargs,normalize=False)
             
             innerpipe=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=True),
@@ -338,6 +343,9 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
             
             if 'poly_search' in specs and specs['poly_search']:
                 enet_kwargs=dict(fit_intercept=specs['fit_intercept'],warm_start=True,selection='random',random_state=0)
+                if 'kwargs' in specs:
+                    for key,val in specs['kwargs'].items():
+                        enet_kwargs[key]=val
                 reg=ElasticNet(**enet_kwargs,normalize=False)
                 alphas=list(np.logspace(-5,1.4,n_alpha))
                 param_grid={'makepolyx__degree':np.arange(1,deg+1),
@@ -345,8 +353,11 @@ class PipelineModel(BaseEstimator,RegressorMixin,myLogger):
                        'elasticnet__alpha':alphas,
                        }
             else:
-                enetcv_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv,l1_ratio=l1_ratio,n_alphas=n_alpha)
-                reg=ElasticNetCV(**enetcv_kwargs,n_jobs=n_jobs,normalize=False,)
+                enet_kwargs=dict(fit_intercept=specs['fit_intercept'],cv=cv,l1_ratio=l1_ratio,n_alphas=n_alpha)
+                if 'kwargs' in specs:
+                    for key,val in specs['kwargs'].items():
+                        enet_kwargs[key]=val
+                reg=ElasticNetCV(**enet_kwargs,n_jobs=n_jobs,normalize=False,)
             innerpipe=make_pipeline(
                 MakePolyX(degree=deg,col_name=model_col_name,interact=True,no_constant=True),
                 DropConst(),
@@ -429,6 +440,7 @@ class ComidData(myLogger):
         self.nonzero_count=nonzero.shape[0] 
         self.runoff_n=n
         self.test_results={} # will contain {m_name:{test_stats:...,yhat_test:...}}
+        self.val_results={}
         
         #data_filter=self.modeldict['filter']
         #self.obs_df,self.mod_df=self.filter_data(obs_df,mod_df,data_filter)
@@ -449,15 +461,21 @@ class ComidData(myLogger):
     def set_train_test(self,):
         df=self.runoff_model_data_df
         train_share=self.modeldict['train_share']
+        val_share=self.modeldict['val_share']
+        test_share=1-val_share-train_share
+        assert test_share>0,f'problem with splits. test not post. test_share:{test_share},val_share:{val_share},test_share:{test_share}'
         n=df.shape[0]
-        split_idx=int(train_share*n)
+        train_split_idx=int(train_share*n)
+        test_split_idx=int((train_share+test_share)*n)
         y_df=df.loc[:,self.sources['observed']]
         x_df=df.drop(self.sources['observed'],axis=1,inplace=False)
     
-        self.x_train=x_df.iloc[:split_idx]
-        self.y_train=y_df.iloc[:split_idx]
-        self.x_test=x_df.iloc[split_idx:]
-        self.y_test=y_df.iloc[split_idx:]
+        self.x_train=x_df.iloc[:train_split_idx]
+        self.y_train=y_df.iloc[:train_split_idx]
+        self.x_test=x_df.iloc[train_split_idx:test_split_idx]
+        self.y_test=y_df.iloc[train_split_idx:test_split_idx]
+        self.x_val=x_df.iloc[test_split_idx:]
+        self.y_val=y_df.iloc[test_split_idx:]
  
 
             
@@ -597,6 +615,8 @@ class DataCollection(myLogger):
         self.big_y_train=pd.concat(big_y_train_list)#.reset_index(drop=True))   
         for obj in self.comid_modeling_objects:
             obj.x_test_float=self.makeDummies(obj.x_test,fit=False)
+        for obj in self.comid_modeling_objects:
+            obj.x_val_float=self.makeDummies(obj.x_val,fit=False)
     
     def runModel(self): #singular!
         model_scale=self.modeldict['model_scale']
@@ -718,8 +738,11 @@ class DataCollection(myLogger):
                 if not type(model_list) is list:model_list=[model_list]
         data_dict={}
         for obj in self.comid_modeling_objects:
-            data_dict[obj.comid]=(obj.x_test_float,obj.y_test)
+            data_dict[obj.comid]={
+                'x_test':obj.x_test_float,'y_test':obj.y_test,
+                'x_val':obj.x_val_float,'y_val':obj.y_val}
             for m_name in m_name_list: obj.test_results[m_name]=[]
+            for m_name in m_name_list: obj.val_results[m_name]=[]    
         args_list=[]
         for m_name,model_list in self.model_results.items():
             args_list.append((m_name,model_list,data_dict,self.modeldict))
@@ -728,9 +751,14 @@ class DataCollection(myLogger):
         for obj in self.comid_modeling_objects:
             for testrunner in outlist:
                 m_name=testrunner.m_name
-                tuplist=testrunner.results_dict[obj.comid]
-                for tup in tuplist:
-                    obj.test_results[m_name].append({'yhat_test':tup[0],'test_stats':tup[1]})
+                comid_results_list=testrunner.results_dict[obj.comid]
+                for c_result_dict in comid_results_list:
+                    obj.test_results[m_name].append(
+                        {'yhat_test':c_result_dict['yhat_test'],
+                         'test_stats':c_result_dict['test_stats']})
+                    obj.val_results[m_name].append(
+                        {'yhat_val':c_result_dict['yhat_val'],
+                         'val_stats':c_result_dict['val_stats']})
                 
         for obj in self.comid_modeling_objects:
             uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
@@ -754,16 +782,27 @@ class TestRunner(myLogger):
             if type(model) is str:
                 with open(model,'rb') as f:
                     model=pickle.load(f)
-            for comid,(x_test,y_test) in self.data_dict.items():    
+            for comid,c_data in self.data_dict.items(): 
                 if not self.modeldict['cross_validate'] or not comid in model.train_comids: #if cross_validate
+                    x_test=c_data['x_test']
+                    y_test=c_data['y_test']
                     #    , then skip comid if it was in training data!
                     yhat_test,test_stats=model.get_prediction_and_stats(x_test,y_test)
-                    
                     if type(test_stats) is str:
                             self.logger.Error(f'test data from comid:{comid}: {(yhat_test,test_stats)}')
-                    else:
-                        pass#self.logger.info(f'test data shape and stats from comid:{comid}: {(yhat_test.shape,test_stats)}')
-                        results_dict[comid].append((yhat_test,test_stats))
+                    else:pass#self.logger.info(f'test data shape and stats from comid:{comid}: {(yhat_test.shape,test_stats)}')
+                    #######repeat for val data
+                    x_val=c_data['x_val']
+                    y_val=c_data['y_val']
+                    #    , then skip comid if it was in training data!
+                    yhat_val,val_stats=model.get_prediction_and_stats(x_val,y_val)
+                    if type(val_stats) is str:
+                            self.logger.Error(f'val data from comid:{comid}: {(yhat_val,val_stats)}')
+                    else:pass#self.logger.info(f'val data shape and stats from comid:{comid}: {(yhat_val.shape,val_stats)}')
+                    
+                    results_dict[comid].append({
+                        'yhat_test':yhat_test,'test_stats':test_stats,
+                        'yhat_val':yhat_val,'val_stats':val_stats})
         self.results_dict=results_dict
 
     
@@ -782,6 +821,7 @@ class CompareCorrect(myLogger):
                 'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
                 'filter':'nonzero',#'none',#'nonzero'
                 'train_share':0.50,
+                'val_share':0.25,#test_share is 1-train_share-val_share. validation is after model selection
                 'split_order':'chronological',#'random'
                 'model_scale':'division',#'division',#'comid'
                 'model_specs':{
@@ -859,7 +899,7 @@ class CompareCorrect(myLogger):
             eco_geog=self.eco.dissolve(by=geog)
             self.eco_geog=eco_geog
             
-    def setDCResultsDict(self):
+    def setDCTestDict(self):
         data_dict={}
         geog=self.modeldict['model_geog']
         for dc in self.dc_list:
@@ -875,15 +915,23 @@ class CompareCorrect(myLogger):
                         #data_dict[m_name]['neg_count'].append(result_dict['test_stats'].neg_count)
                         #data_dict[m_name]['neg_sum'].append(result_dict['test_stats'].neg_sum)
                         data_dict[m_name][geog].append(self.comid_geog_dict[obj.comid][geog])
-        self.dc_results_dict=data_dict
+        self.dc_test_dict=data_dict
+        
+        for result_dict in obj.val_results[m_name]:
+                        data_dict[m_name]['nse'].append(result_dict['val_stats'].nse)
+                        data_dict[m_name]['pearson'].append(result_dict['val_stats'].pearsons)
+                        #data_dict[m_name]['neg_count'].append(result_dict['val_stats'].neg_count)
+                        #data_dict[m_name]['neg_sum'].append(result_dict['val_stats'].neg_sum)
+                        data_dict[m_name][geog].append(self.comid_geog_dict[obj.comid][geog])
+        self.dc_val_dict=data_dict
     
     def plotGeoTestData(self,plot_negative=True):
         try: self.eco_geog
         except: self.setEcoGeog()
-        try: self.dc_results_dict
-        except: self.setDCResultsDict()
+        try: self.dc_test_dict
+        except: self.setDCTestDict()
         geog=self.modeldict['model_geog']
-        for m_name,m_data_dict in self.dc_results_dict.items():            
+        for m_name,m_data_dict in self.dc_test_dict.items():            
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog,how='left')
             plt.rcParams['axes.facecolor'] = 'lightgrey'
@@ -1011,6 +1059,7 @@ class MultiCorrectionTool(myLogger):
                 'sources':{'observed':'nldas','modeled':'cn'}, 
                 'filter':'nonzero',#'none',
                 'train_share':0.50,
+                'val_share':0.25,#test_share is 1-train_share-val_share. validation is after model selection
                 'split_order':'chronological',#'random'
                 'model_scale':'division',#'division',#'comid'
                 'model_specs':None}
@@ -1059,7 +1108,9 @@ class MultiCorrectionTool(myLogger):
         if os.path.exists(name):
             try:
                 with open(name,'rb') as f:
-                    (self.correction_results_df,self.comid_geog_dict)=pickle.load(f)
+                    (self.correction_results_df,
+                     self.correction_results_df_V,
+                     self.comid_geog_dict)=pickle.load(f)
                 return
             except:
                 print(traceback_exc())
@@ -1074,10 +1125,11 @@ class MultiCorrectionTool(myLogger):
             geogs.append(geogdict[self.model_geog])
         geogs=dict.fromkeys(geogs)
         mean_cv_acc_df_list=[]
+        mean_cv_acc_df_list_V=[]
         for cc_idx,cc in enumerate(self.corrections):
-            try:cc.dc_results_dict
-            except:cc.setDCResultsDict()
-            for m_name,m_data_dict in cc.dc_results_dict.items():  
+            try:cc.dc_test_dict
+            except:cc.setDCTestDict()
+            for m_name,m_data_dict in cc.dc_test_dict.items():  
                 if m_name=='uncorrected' and cc_idx>0:continue #avoid repeated assessment...
                 #average over comids in each model_geog
                 mean_acc_df=pd.DataFrame(m_data_dict).groupby(self.model_geog).mean()#.reset_index(name=self.model_geog)
@@ -1087,10 +1139,24 @@ class MultiCorrectionTool(myLogger):
                 mean_acc_df.index=midx
                 #mean_acc_df.loc[:,'collection_idx']=cc_idx
                 mean_cv_acc_df_list.append(mean_acc_df)
+            ############VALIDATE############    
+            for m_name,m_data_dict in cc.dc_val_dict.items():  
+                if m_name=='uncorrected' and cc_idx>0:continue #avoid repeated assessment...
+                #average over comids in each model_geog
+                mean_acc_df=pd.DataFrame(m_data_dict).groupby(self.model_geog).mean()#.reset_index(name=self.model_geog)
+                #mean_acc_df.loc[:,'estimator']=m_name
+                tups=[(m_name,cc_idx,g) for g in mean_acc_df.index]#g for model_geog value
+                midx=pd.MultiIndex.from_tuples(tups,names=['estimator','collection_idx',self.model_geog])
+                mean_acc_df.index=midx
+                #mean_acc_df.loc[:,'collection_idx']=cc_idx
+                mean_cv_acc_df_list_V.append(mean_acc_df)
+                
+                
         self.correction_results_df=pd.concat(mean_cv_acc_df_list,axis=0)
+        self.correction_results_df_V=pd.concat(mean_cv_acc_df_list_V,axis=0)
         try:
             with open(name,'wb') as f:
-                pickle.dump((self.correction_results_df,self.comid_geog_dict),f)
+                pickle.dump((self.correction_results_df,self.correction_results_df_V,self.comid_geog_dict),f)
         except:
             print(traceback_exc())
             print('error saving correctionresultsdf')             
@@ -1105,7 +1171,9 @@ class MultiCorrectionTool(myLogger):
         comid_geog_dict=self.comid_geog_dict
         best_idx=self.correction_results_df.groupby(model_geog)[metric].idxmax()#get index of best metric in each group
         best_model_df=self.correction_results_df.loc[best_idx]
+        best_model_df_V=self.correction_results_df_V.loc[best_idx]
         self.best_model_df=best_model_df
+        self.best_model_df_v=best_model_df_V
         
         geogs=[]
         for comid,geogdict in comid_geog_dict.items():
@@ -1114,7 +1182,9 @@ class MultiCorrectionTool(myLogger):
         self.geog_model_select_dict={}#{g:{'cc_idx':None,'m_name':'None',metric:-np.inf} for g in geogs}
         for midx_tup,row_ser in best_model_df.iterrows():
             self.geog_model_select_dict[midx_tup[2]]={metric:row_ser[metric],'cc_idx':midx_tup[1],'estimator':midx_tup[0]}
-        
+        self.geog_model_select_dict={}#{g:{'cc_idx':None,'m_name':'None',metric:-np.inf} for g in geogs}
+        for midx_tup,row_ser in best_model_df_V.iterrows():
+            self.geog_model_select_dict_V[midx_tup[2]]={metric:row_ser[metric],'cc_idx':midx_tup[1],'estimator':midx_tup[0]}
         
         
     def setCorrectionSelectionAccuracy(self,):
@@ -1141,12 +1211,16 @@ class MultiCorrectionTool(myLogger):
         self.div_id_dict={div:i for i,div in enumerate(self.double_sort_index.get_level_values('division').unique())}
         
     
-    def plotCorrectionRunoffComparison(self,sort=False):
+    def plotCorrectionRunoffComparison(self,sort=False,use_val_data=True):
         s_metric=self.selection_metric
         div_top_idx=self.double_sort_index.to_series().groupby(
             self.model_scale).head(1).index.get_level_values(self.model_geog)
         scale_best_modelg=div_top_idx.to_list()
-        name=os.path.join(self.mct_results_folder,'best-model-geog-runoff.pkl')
+        if use_val_data:
+            val_str='-V'
+        else:
+            val_str=''
+        name=os.path.join(self.mct_results_folder,f'best-model-geog-runoff{val_str}.pkl')
         loaded=False
         if os.path.exists(name):
             try:
@@ -1177,10 +1251,23 @@ class MultiCorrectionTool(myLogger):
                         if not o_mg==mg:# in scale_best_modelg:
                             continue
                         try:
-                            best_comid_runoff_dict[mg][obj.comid]={
-                                'uncorrected':obj.x_test,
-                                self.modeldict['sources']['observed']:obj.y_test,
-                                'corrected':pd.concat([result_dict['yhat_test'] for result_dict in obj.test_results[m_name]],axis=1).mean(axis=1)} #concatenating cv yhats for each comid 
+                            if use_val_data:
+                                best_comid_runoff_dict[mg][obj.comid]={
+                                    'uncorrected':obj.x_val,
+                                    self.modeldict['sources']['observed']:obj.y_val,
+                                    'corrected':pd.concat([
+                                        result_dict['yhat_val'] for result_dict in
+                                        obj.val_results[m_name]],axis=1).mean(axis=1)
+                                    } 
+                            else:
+                            
+                                best_comid_runoff_dict[mg][obj.comid]={
+                                    'uncorrected':obj.x_test,
+                                    self.modeldict['sources']['observed']:obj.y_test,
+                                    'corrected':pd.concat([
+                                        result_dict['yhat_test'] for result_dict in
+                                        obj.test_results[m_name]],axis=1).mean(axis=1)
+                                    } #concatenating cv yhats for each comid 
                         except ValueError: 
                             print(f'ValueError for comid:{obj.comid}')
                         except:
@@ -1197,7 +1284,7 @@ class MultiCorrectionTool(myLogger):
                 best_modelg_runoff_dict[mg]=mg_df_dict
             with open(name,'wb') as f:
                 pickle.dump(best_modelg_runoff_dict,f)
-        self.best_modelg_runoff_dict=best_modelg_runoff_dict  
+               
                         
         plt.rcParams['hatch.linewidth'] = 0.1
         plt.rcParams['axes.facecolor'] = 'lightgrey'
@@ -1256,7 +1343,10 @@ class MultiCorrectionTool(myLogger):
                 #pass
                 ax.set_xticklabels([])
                 ax.set_xticks([])
-        #fig.text(0.5, 1.02, 'common xlabel', ha='center', va='center')
+        if use_val_data:
+            fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
+        else:
+            fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
         fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
         fig.tight_layout()
         fig.show()
@@ -1286,7 +1376,7 @@ class MultiCorrectionTool(myLogger):
         
             
     
-    def plotCorrectionResultLines(self):
+    def plotCorrectionResultLines(self,use_val_data=False):
         s_metric=self.selection_metric
         try: self.double_sort
         except: self.setSortOrder()
@@ -1331,14 +1421,18 @@ class MultiCorrectionTool(myLogger):
             s_name_midx_tups.append((s_name,*tup))
         new_midx=pd.MultiIndex.from_tuples(s_name_midx_tups,names=['base est',*list(midx.names)])
         s_name_grouped_correction_results_df.index=new_midx
-        
+        if use_val_data:
+            s_name_grouped_correction_results_df_V=self.correction_results_df_V.copy()
+            s_name_grouped_correction_results_df_V.index=new_midx
         #best_est_geog_df=s_name_grouped_correction_results_df.sort_values(
         #   s_metric,ascending=False).drop_duplicates(['base est',self.model_geog])
-        best_est_geog_df=s_name_grouped_correction_results_df.loc[
-            s_name_grouped_correction_results_df.groupby(
+        best_base_est_idx=s_name_grouped_correction_results_df.groupby(
                 ['base est',self.model_geog]
                 )[s_metric].idxmax()
-            ]
+        if use_val_data:
+            best_est_geog_df=s_name_grouped_correction_results_df_V.loc[best_base_est_idx]
+        else:
+            best_est_geog_df=s_name_grouped_correction_results_df.loc[best_base_est_idx]
         
         m_ser_dict={}
         short_m_names=new_midx.get_level_values('base est').unique().to_list()
@@ -1357,6 +1451,11 @@ class MultiCorrectionTool(myLogger):
         plt.rcParams['axes.facecolor'] = 'lightgrey'
         fig=plt.figure(dpi=300,figsize=[9,8])
         fig.patch.set_facecolor('w')
+        if use_val_data:
+            fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
+        else:
+            fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
+           
         fig.suptitle(f'Cross Validation Scores by Estimator for Sections, Grouped by Division ID')
         colors = plt.get_cmap('tab10')(np.arange(10))
         for i,metric in enumerate(metrics):
@@ -1411,7 +1510,10 @@ class MultiCorrectionTool(myLogger):
         
         geogs=[];selections=[];accuracies=[]
         for geog in self.double_sort_model_geog_index.to_list():
-            select_dict=self.geog_model_select_dict[geog]
+            if use_val_data:
+                select_dict=self.geog_model_select_dict_V[geog]
+            else:
+                select_dict=self.geog_model_select_dict[geog]
             geogs.append(geog)
             accuracies.append(select_dict[self.selection_metric])
             selections.append(select_dict['estimator'].upper())

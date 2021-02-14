@@ -762,7 +762,14 @@ class DataCollection(myLogger):
                 
         for obj in self.comid_modeling_objects:
             uncorr_yhat=obj.x_test.loc[:,self.modeldict['sources']['modeled']]
-            obj.test_results['uncorrected']=[{'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),'yhat_test':uncorr_yhat}]
+            obj.test_results['uncorrected']=[{
+                'test_stats':SeriesCompare(obj.y_test.values,uncorr_yhat.values),
+                'yhat_test':uncorr_yhat}]
+            uncorr_yhat=obj.x_val.loc[:,self.modeldict['sources']['modeled']]
+            obj.val_results['uncorrected']=[{
+                'val_stats':SeriesCompare(obj.y_val.to_numpy(),uncorr_yhat.to_numpy()),
+                'yhat_val':uncorr_yhat}]
+            
             
    
 
@@ -1154,6 +1161,10 @@ class MultiCorrectionTool(myLogger):
                 
         self.correction_results_df=pd.concat(mean_cv_acc_df_list,axis=0)
         self.correction_results_df_V=pd.concat(mean_cv_acc_df_list_V,axis=0)
+        idx=self.correction_results_df.index
+        idx_V=self.correction_results_df_V.index
+        idx_n=len(idx)
+        assert idx.equal_level(idx_V),f'validate version of self.correction_results_df has different index !!!'
         try:
             with open(name,'wb') as f:
                 pickle.dump((self.correction_results_df,self.correction_results_df_V,self.comid_geog_dict),f)
@@ -1171,7 +1182,7 @@ class MultiCorrectionTool(myLogger):
         comid_geog_dict=self.comid_geog_dict
         best_idx=self.correction_results_df.groupby(model_geog)[metric].idxmax()#get index of best metric in each group
         best_model_df=self.correction_results_df.loc[best_idx]
-        best_model_df_V=self.correction_results_df_V.loc[best_idx]
+        best_model_df_V=self.correction_results_df_V.loc[best_idx] #select value from val that is best in test
         self.best_model_df=best_model_df
         self.best_model_df_v=best_model_df_V
         
@@ -1181,20 +1192,31 @@ class MultiCorrectionTool(myLogger):
         geogs=dict.fromkeys(geogs)
         self.geog_model_select_dict={}#{g:{'cc_idx':None,'m_name':'None',metric:-np.inf} for g in geogs}
         for midx_tup,row_ser in best_model_df.iterrows():
-            self.geog_model_select_dict[midx_tup[2]]={metric:row_ser[metric],'cc_idx':midx_tup[1],'estimator':midx_tup[0]}
-        self.geog_model_select_dict={}#{g:{'cc_idx':None,'m_name':'None',metric:-np.inf} for g in geogs}
+            self.geog_model_select_dict[midx_tup[2]]={
+                metric:row_ser[metric],'cc_idx':midx_tup[1],'estimator':midx_tup[0]}
+        self.geog_model_select_dict_V={}#{g:{'cc_idx':None,'m_name':'None',metric:-np.inf} for g in geogs}
         for midx_tup,row_ser in best_model_df_V.iterrows():
-            self.geog_model_select_dict_V[midx_tup[2]]={metric:row_ser[metric],'cc_idx':midx_tup[1],'estimator':midx_tup[0]}
+            self.geog_model_select_dict_V[midx_tup[2]]={
+                metric:row_ser[metric],'cc_idx':midx_tup[1],'estimator':midx_tup[0]}
         
         
     def setCorrectionSelectionAccuracy(self,):
         try: self.geog_model_select_dict
         except: self.selectCorrections()
         geogs=[];accuracies=[]
+        accuracies_V=[]
         for geog,select_dict in self.geog_model_select_dict.items():
             geogs.append(geog)
             accuracies.append(select_dict[self.selection_metric])
-        self.correction_selection_accuracy=pd.DataFrame({self.selection_metric:accuracies,self.model_geog:geogs})
+            select_dict_V=self.geog_model_select_dict_V[geog]
+            accuracies_V.append(select_dict_V[self.selection_metric])
+            self.correction_selection_accuracy=pd.DataFrame({
+                self.selection_metric:accuracies,self.model_geog:geogs})
+            self.correction_selection_accuracy_V=pd.DataFrame({
+                self.selection_metric:accuracies_V,self.model_geog:geogs})
+        
+        
+        
         
     def setSortOrder(self,):
         try:self.correction_selection_accuracy
@@ -1210,11 +1232,27 @@ class MultiCorrectionTool(myLogger):
         self.double_sort_model_geog_index=double_sort.index.get_level_values(self.model_geog)
         self.div_id_dict={div:i for i,div in enumerate(self.double_sort_index.get_level_values('division').unique())}
         
+        model_geogs=self.correction_selection_accuracy_V.loc[:,self.model_geog]
+        midx=self.expandGeogsToMultiIndex(model_geogs)
+        full_g_scores=self.correction_selection_accuracy_V.loc[:,self.selection_metric].copy()
+        full_g_scores.index=midx
+        scale_sort=full_g_scores.groupby(self.model_scale,).mean().sort_values(ascending=False).index.to_list()
+        double_sort=full_g_scores.sort_values(ascending=False).loc[scale_sort,:]
+        self.double_sort_V=double_sort
+        self.double_sort_index_V=double_sort.index
+        self.double_sort_model_geog_index_V=double_sort.index.get_level_values(self.model_geog)
+        self.div_id_dict_V={div:i for i,div in enumerate(self.double_sort_index_V.get_level_values('division').unique())}
+        
+        
     
     def plotCorrectionRunoffComparison(self,sort=False,use_val_data=True):
         s_metric=self.selection_metric
-        div_top_idx=self.double_sort_index.to_series().groupby(
-            self.model_scale).head(1).index.get_level_values(self.model_geog)
+        if use_val_data:
+            div_top_idx=self.double_sort_index_V.to_series().groupby(
+                self.model_scale).head(1).index.get_level_values(self.model_geog)
+        else:
+            div_top_idx=self.double_sort_index.to_series().groupby(
+                self.model_scale).head(1).index.get_level_values(self.model_geog)
         scale_best_modelg=div_top_idx.to_list()
         if use_val_data:
             val_str='-V'
@@ -1241,7 +1279,7 @@ class MultiCorrectionTool(myLogger):
             best_comid_runoff_dict={mg:{} for mg in scale_best_modelg}
             best_modelg_comidlist_dict=self.buildComidListDict(scale_best_modelg)
             for mg in scale_best_modelg:
-                dc_list=self.corrections[self.geog_model_select_dict[mg]['cc_idx']].dc_list
+                dc_list=self.corrections[self.geog_model_select_dict[mg]['cc_idx']].dc_list#cc_idx invarant to _V or not
                 m_name=self.geog_model_select_dict[mg]['estimator']
                 for dc in dc_list:
                     #cv_models=dc.model_results['m_name']
@@ -1357,10 +1395,6 @@ class MultiCorrectionTool(myLogger):
         fig.savefig(os.path.join(self.mct_results_folder,name))
             
                         
-                        
-                     
-                                 
-                                 
                                  
                                  
     def buildComidListDict(self,modelg_list):
@@ -1376,7 +1410,7 @@ class MultiCorrectionTool(myLogger):
         
             
     
-    def plotCorrectionResultLines(self,use_val_data=False):
+    def plotCorrectionResultLines(self,use_val_data=True):
         s_metric=self.selection_metric
         try: self.double_sort
         except: self.setSortOrder()
@@ -1384,9 +1418,15 @@ class MultiCorrectionTool(myLogger):
         except: self.buildCorrectionResultsDF()
         try: self.correction_selection_accuracy
         except: self.setCorrectionSelectionAccuracy()
-        sort_idx=self.double_sort_model_geog_index
+        if use_val_data:
+            sort_idx=self.double_sort_model_geog_index_V
+            g_scales=self.double_sort_index_V.get_level_values(self.model_scale).to_list()
+        else:
+            sort_idx=self.double_sort_model_geog_index
+            g_scales=self.double_sort_index.get_level_values(self.model_scale).to_list()
         n=sort_idx.shape[0]
-        g_scales=self.double_sort_index.get_level_values(self.model_scale).to_list()
+            
+        
         
         #g_model=self.double_sort_index.get_level_values(self.model_geog)
         #scale_xticks=pd.Series(g_scales,name=self.model_scale).reset_index().groupby(self.model_scale).count().cumsum().iloc[:,0].to_list()
@@ -1402,7 +1442,7 @@ class MultiCorrectionTool(myLogger):
         scale_items=[str(i) for i in range(len(scale_items))]
         g_ID=[f'{g_scales[i]}-{i}' for i in range(n)] 
         #g_ID=list(range(n))
-        metrics=self.correction_results_df.columns.to_list()
+        metrics=self.correction_results_df.columns.to_list()#invariant to _V
         m_names=self.correction_results_df.index.get_level_values('estimator').unique()
 
         #best_per_m=self.correction_results_df.loc[self.correction_results_df.groupby([self.model_geog,'estimator'])[s_metric].idxmax()] #if m_name is repeated, pick only the best for each section
@@ -1413,7 +1453,7 @@ class MultiCorrectionTool(myLogger):
             m_ser_dict[m]=ser.reindex(sort_idx) #sorted """
         
         
-        s_name_grouped_correction_results_df=self.correction_results_df.copy()
+        s_name_grouped_correction_results_df=self.correction_results_df.copy()#invariant to _V b/c multiIndex equality...
         midx=s_name_grouped_correction_results_df.index
         s_name_midx_tups=[]
         for tup in midx.to_list():
@@ -1503,17 +1543,23 @@ class MultiCorrectionTool(myLogger):
         return pd.MultiIndex.from_tuples(geog_tup_list,names=higher_geog_levels)
             
     
-    def saveCorrectionSelectionTable(self,expand_geog=True):
+    def saveCorrectionSelectionTable(self,expand_geog=True,use_val_data=True):
         assert self.geog_model_select_dict,'run the corrections and selection first'
         try: self.double_sort_model_geog_index
         except:self.setSortOrder()
         
         geogs=[];selections=[];accuracies=[]
-        for geog in self.double_sort_model_geog_index.to_list():
-            if use_val_data:
-                select_dict=self.geog_model_select_dict_V[geog]
-            else:
-                select_dict=self.geog_model_select_dict[geog]
+        if use_val_data:
+            val_str='-V'
+            double_sort_mg_index=self.double_sort_model_geog_index_V
+            mg_select_dict=self.geog_model_select_dict_V
+        else:
+            val_str=''
+            double_sort_mg_index=self.double_sort_model_geog_index
+            mg_select_dict=self.geog_model_select_dict
+        
+        for geog in double_sort_mg_index.to_list():
+            select_dict=mg_select_dict[geog]
             geogs.append(geog)
             accuracies.append(select_dict[self.selection_metric])
             selections.append(select_dict['estimator'].upper())
@@ -1521,24 +1567,26 @@ class MultiCorrectionTool(myLogger):
             geogs=self.expandGeogsToMultiIndex(geogs)
             
         hash_id=self.hash_id
-        correction_selection_names=pd.Series(selections,name='best estimator',index=geogs)
-        correction_selection_names.to_csv(os.path.join(self.mct_results_folder,f'correction_selection_names_{hash_id}.csv'))
+        #correction_selection_names=pd.Series(selections,name='best estimator',index=geogs)
+        #correction_selection_names.to_csv(os.path.join(self.mct_results_folder,f'correction_selection_names_{hash_id}.csv'))
         
-        geogs_with_id=pd.MultiIndex.from_tuples([tuple([self.div_id_dict[mtup[0]]]+list(mtup))for mtup in geogs],names=['division ID']+list(geogs.names))
+        geogs_with_id=pd.MultiIndex.from_tuples(
+            [tuple([self.div_id_dict[mtup[0]]]+list(mtup))for mtup in geogs],# invariant to _V
+            names=['division ID']+list(geogs.names))
         correction_selection_score=pd.DataFrame(
             {
                 'selected estimator':selections,
                 self.selection_metric:accuracies,
                 #'ID':list(range(len(selections)))
             },index=geogs_with_id)
-        correction_selection_score.to_csv(os.path.join(self.mct_results_folder,f'correction_selection_score_{hash_id}.csv'))
-        correction_selection_score.to_html(os.path.join(self.mct_results_folder,f'correction_selection_score_{hash_id}.html'))
+        correction_selection_score.to_csv(os.path.join(self.mct_results_folder,f'correction_selection_score_{hash_id}{val_str}.csv'))
+        correction_selection_score.to_html(os.path.join(self.mct_results_folder,f'correction_selection_score_{hash_id}{val_str}.html'))
     
     
      
     
     
-    def plotGeogHybridAccuracy(self,plot_negative=True,cmap=None):
+    def plotGeogHybridAccuracy(self,plot_negative=True,cmap=None,use_val_data=True):
         try: self.eco_geog
         except: self.setEcoGeog()
         #try: self.correction_selection_accuracy
@@ -1549,7 +1597,10 @@ class MultiCorrectionTool(myLogger):
         geog=self.model_geog
         metric=self.selection_metric
         #hybrid_accuracy_series=self.correction_selection_accuracy#.reset_index(name=geog)
-        best_model_df=self.best_model_df.copy()
+        if use_val_data:
+            best_model_df=self.best_model_df_V.copy()
+        else:
+            best_model_df=self.best_model_df.copy()
         best_model_df.index=best_model_df.index.get_level_values(self.model_geog)
         hybrid_geog=self.eco_geog.merge(best_model_df,on=geog,how='left')
         

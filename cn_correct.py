@@ -1341,7 +1341,7 @@ class MultiCorrectionTool(myLogger):
             
             self.makeRunoffPlot(
                 best_modelg_runoff_dict_zero,base_name+'-zero',
-                scale_best_modelg,sort,use_val_data,time_range)
+                Sscale_best_modelg,sort,use_val_data,time_range)
             self.makeRunoffPlot(
                 best_modelg_runoff_dict_nonzero,base_name+'-nonzero',
                 scale_best_modelg,sort,use_val_data,time_range)
@@ -1351,6 +1351,12 @@ class MultiCorrectionTool(myLogger):
                 scale_best_modelg,sort,use_val_data,time_range)
         
     def makeRunoffPlot(self,best_modelg_runoff_dict,name,scale_best_modelg,sort,use_val_data,time_range):
+        if type(time_range) is str:
+            if time_range=='last year':
+                time_range=slice(-365,None)
+            else:assert False,f'unexpected time_range:{time_range}'
+        else:
+            assert type(time_range) in [list,slice,np.ndarray],f'unexpected type for time_range:{type(time_range)}'
         fig=plt.figure(dpi=300,figsize=[16,12])
         fig.subplots_adjust(wspace=None,hspace=None)
         fig.patch.set_facecolor('w')
@@ -1361,7 +1367,7 @@ class MultiCorrectionTool(myLogger):
         d_n=len(best_modelg_runoff_dict)
         ax_list=[]
         #back_ax=ax = fig.add_subplot(111) 
-
+    
         for i,(mg,runoffdict) in enumerate(best_modelg_runoff_dict.items()):
             if i==0:
                 ax=fig.add_subplot(d_n,1,i+1)
@@ -1372,33 +1378,20 @@ class MultiCorrectionTool(myLogger):
             ax_list.append(ax)
             if sort:
                 sort_key=self.modeldict['sources']['observed']
-                np_sort_idx=runoffdict[sort_key].sort_index(inplace=False).to_numpy().argsort()
+                if time_range:
+                    np_sort_idx=runoffdict[sort_key][time_range].sort_index(inplace=False).to_numpy().argsort()
+                else:
+                    np_sort_idx=runoffdict[sort_key].sort_index(inplace=False).to_numpy().argsort()
 
             for k,(key,df) in enumerate(runoffdict.items()):
-                #print(f'key:{key}, df.shape:{df.shape},df.head():{df.head()}')
-                """if sort:
-                    df=df.loc[sort_idx]#df.reindex(sort_idx)
-                else:
-                    df.sort_index(inplace=True)"""
                 df.sort_index(inplace=True)
-                
-                    
-                x=df.index.to_numpy().ravel()#[-365:] #.tolist()
-                #y=df.to_numpy().ravel().tolist()[-430:]
-                y=np.log(df.to_numpy().ravel()+1)#.tolist()#[-365:]
+                x=df.index.to_numpy().ravel()
+                y=np.log(df.to_numpy().ravel()+1)
                 if time_range:
-                    if type(time_range) is str:
-                        if time_range=='last year':
-                            time_range=slice(-365,None)
-                    if type(time_range) in [list,np.ndarray,slice]:
-                        x=x[time_range]
-                        y=y[time_range]
-                        if sort:
-                            np_sort_idx=np_sort_idx[time_range]
-                    else:
-                        assert False, f'unexpected time_range:{time_range}'
+                    x=x[time_range]
+                    y=y[time_range]
                 if sort:
-                    x=np.arange(y.shape[0])#x[np_sort_idx]#.astype('object')
+                    x=np.arange(x.shape[0])
                     y=y[np_sort_idx]
                 #self.xlist.append(x)
                 #self.ylist.append(y)

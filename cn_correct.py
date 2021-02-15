@@ -1184,7 +1184,7 @@ class MultiCorrectionTool(myLogger):
         best_model_df=self.correction_results_df.loc[best_idx]
         best_model_df_V=self.correction_results_df_V.loc[best_idx] #select value from val that is best in test
         self.best_model_df=best_model_df
-        self.best_model_df_v=best_model_df_V
+        self.best_model_df_V=best_model_df_V
         
         geogs=[]
         for comid,geogdict in comid_geog_dict.items():
@@ -1388,10 +1388,13 @@ class MultiCorrectionTool(myLogger):
         fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
         fig.tight_layout()
         fig.show()
+        if use_val_data:
+            val_str='_V'
+        else:val_str=''
         if sort:
-            name=f'runoff-comparison-sorted.tif'
+            name=f'runoff-comparison-sorted{val_str}.tif'
         else:
-            name=f'runoff-comparison.tif'
+            name=f'runoff-comparison_{val_str}.tif'
         fig.savefig(os.path.join(self.mct_results_folder,name))
             
                         
@@ -1523,7 +1526,10 @@ class MultiCorrectionTool(myLogger):
             #    label.set_rotation(40)
         fig.tight_layout()
         plt.show()
-        fig.savefig(os.path.join(self.mct_results_folder,f'correction_results_lines{self.hash_id}.tif'))
+        if use_val_data:
+            val_str='_V'
+        else:val_str=''
+        fig.savefig(os.path.join(self.mct_results_folder,f'correction_results_lines{self.hash_id}{val_str}.tif'))
         
         
     

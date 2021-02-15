@@ -1164,7 +1164,7 @@ class MultiCorrectionTool(myLogger):
         idx=self.correction_results_df.index
         idx_V=self.correction_results_df_V.index
         idx_n=len(idx)
-        assert idx.equal_level(idx_V),f'validate version of self.correction_results_df has different index !!!'
+        assert idx.equal_levels(idx_V),f'validate version of self.correction_results_df has different index !!!'
         try:
             with open(name,'wb') as f:
                 pickle.dump((self.correction_results_df,self.correction_results_df_V,self.comid_geog_dict),f)

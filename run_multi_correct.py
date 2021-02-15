@@ -56,8 +56,8 @@ if __name__=='__main__':
             'kwargs':{'max_iter':5000,'tol':1e-6},
             'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
             'max_poly_deg':i,'poly_search':False,
-            'fit_intercept':False,'n_alphas':50}
-            },
+            'fit_intercept':False,'n_alphas':50
+            } for i in range(1,max_deg+1)},
 
         {f'ridge-{i}':{
             'kwargs':{'max_iter':5000,'tol':1e-6},

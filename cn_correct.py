@@ -1245,7 +1245,7 @@ class MultiCorrectionTool(myLogger):
         
         
     
-    def plotCorrectionRunoffComparison(self,sort=False,use_val_data=True,split_zero=True):#,time_range=None):
+    def plotCorrectionRunoffComparison(self,sort=False,use_val_data=True,split_zero=True,time_range=None):
         s_metric=self.selection_metric
         if use_val_data:
             div_top_idx=self.double_sort_index_V.to_series().groupby(
@@ -1342,12 +1342,13 @@ class MultiCorrectionTool(myLogger):
             self.makeRunoffPlot(best_modelg_runoff_dict_zero,base_name+'-zero',scale_best_modelg,sort,use_val_data)
             self.makeRunoffPlot(best_modelg_runoff_dict_nonzero,base_name+'-nonzero',scale_best_modelg,sort,use_val_data)
         else:
-            self.makeRunoffPlot(best_modelg_runoff_dict,base_name,scale_best_modelg,sort,use_val_data)
+            self.makeRunoffPlot(best_modelg_runoff_dict,base_name,scale_best_modelg,sort,use_val_data,time_range)
         
-    def makeRunoffPlot(self,best_modelg_runoff_dict,name,scale_best_modelg,sort,use_val_data):
+    def makeRunoffPlot(self,best_modelg_runoff_dict,name,scale_best_modelg,sort,use_val_data,time_range):
         fig=plt.figure(dpi=300,figsize=[16,12])
         fig.subplots_adjust(wspace=None,hspace=None)
         fig.patch.set_facecolor('w')
+        
         fig.suptitle(f'Runoff Time Series Top Scoring Section from Each Division',fontsize=14)
         colors = plt.get_cmap('tab10')(np.arange(10))
         linestyles=['-', '--', '-.', ':']
@@ -1374,9 +1375,22 @@ class MultiCorrectionTool(myLogger):
                 else:
                     df.sort_index(inplace=True)"""
                 df.sort_index(inplace=True)
+                
+                    
                 x=df.index.to_numpy().ravel()#[-365:] #.tolist()
                 #y=df.to_numpy().ravel().tolist()[-430:]
                 y=np.log(df.to_numpy().ravel()+1)#.tolist()#[-365:]
+                if time_range:
+                    if type(time_range) is str:
+                        if time_range=='last year':
+                            time_range=slice(-365,None)
+                    if type(time_range) in [list,np.ndarray,slice]:
+                        x=x[time_range]
+                        y=y[time_range]
+                        if sort:
+                            np_sort_idx=np_sort_idx[time_range]
+                    else:
+                        assert False, f'unexpected time_range:{time_range}'
                 if sort:
                     x=np.arange(y.shape[0])#x[np_sort_idx]#.astype('object')
                     y=y[np_sort_idx]

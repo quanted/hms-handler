@@ -1339,10 +1339,16 @@ class MultiCorrectionTool(myLogger):
                         print(f'error for r_name:{r_name}, r_ser:{r_ser}','traceback:')
                         print(traceback_exc())
             
-            self.makeRunoffPlot(best_modelg_runoff_dict_zero,base_name+'-zero',scale_best_modelg,sort,use_val_data)
-            self.makeRunoffPlot(best_modelg_runoff_dict_nonzero,base_name+'-nonzero',scale_best_modelg,sort,use_val_data)
+            self.makeRunoffPlot(
+                best_modelg_runoff_dict_zero,base_name+'-zero',
+                scale_best_modelg,sort,use_val_data,time_range)
+            self.makeRunoffPlot(
+                best_modelg_runoff_dict_nonzero,base_name+'-nonzero',
+                scale_best_modelg,sort,use_val_data,time_range)
         else:
-            self.makeRunoffPlot(best_modelg_runoff_dict,base_name,scale_best_modelg,sort,use_val_data,time_range)
+            self.makeRunoffPlot(
+                best_modelg_runoff_dict,base_name,
+                scale_best_modelg,sort,use_val_data,time_range)
         
     def makeRunoffPlot(self,best_modelg_runoff_dict,name,scale_best_modelg,sort,use_val_data,time_range):
         fig=plt.figure(dpi=300,figsize=[16,12])

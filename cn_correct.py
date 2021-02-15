@@ -1291,7 +1291,7 @@ class MultiCorrectionTool(myLogger):
                         try:
                             if use_val_data:
                                 best_comid_runoff_dict[mg][obj.comid]={
-                                    'uncorrected':obj.x_val,
+                                    'uncorrected':obj.x_val.loc[:,self.modeldict['sources']['modeled']],
                                     self.modeldict['sources']['observed']:obj.y_val,
                                     'corrected':pd.concat([
                                         result_dict['yhat_val'] for result_dict in
@@ -1323,21 +1323,8 @@ class MultiCorrectionTool(myLogger):
             with open(name,'wb') as f:
                 pickle.dump(best_modelg_runoff_dict,f)
                
-                        
-        plt.rcParams['hatch.linewidth'] = 0.1
-        plt.rcParams['axes.facecolor'] = 'lightgrey'
-        fig=plt.figure(dpi=300,figsize=[16,12])
-        fig.subplots_adjust(wspace=None,hspace=None)
-        fig.patch.set_facecolor('w')
-        fig.suptitle(f'Runoff Time Series Top Scoring Section from Each Division',fontsize=14)
-        colors = plt.get_cmap('tab10')(np.arange(10))
-        linestyles=['-', '--', '-.', ':']
-        d_n=len(best_modelg_runoff_dict)   
-        ax_list=[]
-        #self.xlist=[]
-        #self.ylist=[]
-        #back_ax=ax = fig.add_subplot(111) 
-        name='runoff-comparison'
+           
+        base_name='runoff-comparison'
         if split_zero:
             best_modelg_runoff_dict_nonzero={};best_modelg_runoff_dict_zero={}
             for g,g_dict in best_modelg_runoff_dict.items():
@@ -1345,75 +1332,88 @@ class MultiCorrectionTool(myLogger):
                 best_modelg_runoff_dict_nonzero[g]={}
                 best_modelg_runoff_dict_zero[g]={}
                 for r_name,r_ser in g_dict.items():
-                    best_modelg_runoff_dict_nonzero[g][r_name]=r_ser[~non_z_idx]
-                    best_modelg_runoff_dict_zero[g][r_name]=r_ser[non_z_idx]
-                        
+                    try:
+                        best_modelg_runoff_dict_nonzero[g][r_name]=r_ser[~non_z_idx]
+                        best_modelg_runoff_dict_zero[g][r_name]=r_ser[non_z_idx]
+                    except:
+                        print(f'error for r_name:{r_name}, r_ser:{r_ser}','traceback:')
+                        print(traceback_exc())
             
-            self.makeRunoffPlot(best_modelg_runoff_dict_zero,name+'-zero',sort)
-            self.makeRunoffPlot(best_modelg_runoff_dict_nonzero,name+'-nonzero',sort)
+            self.makeRunoffPlot(best_modelg_runoff_dict_zero,base_name+'-zero',scale_best_modelg,sort,use_val_data)
+            self.makeRunoffPlot(best_modelg_runoff_dict_nonzero,base_name+'-nonzero',scale_best_modelg,sort,use_val_data)
         else:
-            self.makeRunoffPlot(best_modelg_runoff_dict,name,sort)
+            self.makeRunoffPlot(best_modelg_runoff_dict,base_name,scale_best_modelg,sort,use_val_data)
         
-    def makeRunoffPlot(self,best_modelg_runoff_dict,name,sort):
-            for i,(mg,runoffdict) in enumerate(best_modelg_runoff_dict.items()):
-                if i==0:
-                    ax=fig.add_subplot(d_n,1,i+1)
+    def makeRunoffPlot(self,best_modelg_runoff_dict,name,scale_best_modelg,sort,use_val_data):
+        fig=plt.figure(dpi=300,figsize=[16,12])
+        fig.subplots_adjust(wspace=None,hspace=None)
+        fig.patch.set_facecolor('w')
+        fig.suptitle(f'Runoff Time Series Top Scoring Section from Each Division',fontsize=14)
+        colors = plt.get_cmap('tab10')(np.arange(10))
+        linestyles=['-', '--', '-.', ':']
+        d_n=len(best_modelg_runoff_dict)
+        ax_list=[]
+        #back_ax=ax = fig.add_subplot(111) 
 
-                else:
-                    ax=fig.add_subplot(d_n,1,i+1)#,sharex=ax_list[0])
+        for i,(mg,runoffdict) in enumerate(best_modelg_runoff_dict.items()):
+            if i==0:
+                ax=fig.add_subplot(d_n,1,i+1)
 
-                ax_list.append(ax)
-                if sort:
-                    sort_key=self.modeldict['sources']['observed']
-                    np_sort_idx=runoffdict[sort_key].sort_index(inplace=False).to_numpy().argsort()
-
-                for k,(key,df) in enumerate(runoffdict.items()):
-                    #print(f'key:{key}, df.shape:{df.shape},df.head():{df.head()}')
-                    """if sort:
-                        df=df.loc[sort_idx]#df.reindex(sort_idx)
-                    else:
-                        df.sort_index(inplace=True)"""
-                    df.sort_index(inplace=True)
-                    x=df.index.to_numpy().ravel()#[-365:] #.tolist()
-                    #y=df.to_numpy().ravel().tolist()[-430:]
-                    y=np.log(df.to_numpy().ravel()+1)#.tolist()#[-365:]
-                    if sort:
-                        x=np.arange(y.shape[0])#x[np_sort_idx]#.astype('object')
-                        y=y[np_sort_idx]
-                    #self.xlist.append(x)
-                    #self.ylist.append(y)
-                    #ax.grid('on', linestyle='--',alpha=0.7,color='w')
-                    ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
-                        alpha=.7,linestyle=linestyles[k],
-                        linewidth=0.3)
-                    #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
-            for i,ax in enumerate(ax_list):
-                ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
-                if i==0:
-                    ax.legend()
-                    #ax.set_xlabel('X LABEL')    
-                    ax.xaxis.set_label_position('top') 
-                    ax.xaxis.tick_top()
-                else:
-                    #pass
-                    ax.set_xticklabels([])
-                    ax.set_xticks([])
-            if use_val_data:
-                fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
             else:
-                fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
-            fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
-            fig.tight_layout()
-            fig.show()
-            
+                ax=fig.add_subplot(d_n,1,i+1)#,sharex=ax_list[0])
+
+            ax_list.append(ax)
             if sort:
-                name+='_sorted'
-            if use_val_data:
-                name+='_V'
-            
-            
-            fig.savefig(os.path.join(self.mct_results_folder,name+'.tif'))
+                sort_key=self.modeldict['sources']['observed']
+                np_sort_idx=runoffdict[sort_key].sort_index(inplace=False).to_numpy().argsort()
+
+            for k,(key,df) in enumerate(runoffdict.items()):
+                #print(f'key:{key}, df.shape:{df.shape},df.head():{df.head()}')
+                """if sort:
+                    df=df.loc[sort_idx]#df.reindex(sort_idx)
+                else:
+                    df.sort_index(inplace=True)"""
+                df.sort_index(inplace=True)
+                x=df.index.to_numpy().ravel()#[-365:] #.tolist()
+                #y=df.to_numpy().ravel().tolist()[-430:]
+                y=np.log(df.to_numpy().ravel()+1)#.tolist()#[-365:]
+                if sort:
+                    x=np.arange(y.shape[0])#x[np_sort_idx]#.astype('object')
+                    y=y[np_sort_idx]
+                #self.xlist.append(x)
+                #self.ylist.append(y)
+                #ax.grid('on', linestyle='--',alpha=0.7,color='w')
+                ax_list[-1].plot(
+                    x,y,label=key,color=colors[k],
+                    alpha=.7,linestyle=linestyles[k],
+                    linewidth=0.3)
+                #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
+        for i,ax in enumerate(ax_list):
+            ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
+            if i==0:
+                ax.legend()
+                #ax.set_xlabel('X LABEL')    
+                ax.xaxis.set_label_position('top') 
+                ax.xaxis.tick_top()
+            else:
+                #pass
+                ax.set_xticklabels([])
+                ax.set_xticks([])
+        if use_val_data:
+            fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
+        else:
+            fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
+        fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
+        fig.tight_layout()
+        fig.show()
+
+        if sort:
+            name+='_sorted'
+        if use_val_data:
+            name+='_V'
+
+
+        fig.savefig(os.path.join(self.mct_results_folder,name+'.tif'))
             
                         
                                  

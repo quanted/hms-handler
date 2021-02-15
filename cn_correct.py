@@ -1408,13 +1408,20 @@ class MultiCorrectionTool(myLogger):
                 if key==self.modeldict['sources']['observed']:
                     ax_list[-1].plot(
                         x,y,label=key,color=colors[k],
-                        alpha=.3,linestyle=linestyles[k],
-                        linewidth=2)
+                        alpha=1,
+                        linewidth=2,zorder=0)
+                    ax_list[-1].plot(
+                        x,y,label=key,color=colors[k],
+                        alpha=.3,
+                        linewidth=6,zorder=0)
                 else:
                     ax_list[-1].plot(
-                        x,y,'o-',label=key,color=colors[k],
-                        alpha=.8,linestyle=linestyles[k],
-                        linewidth=0.6)
+                        x,y,label=key,color=colors[k],
+                        alpha=.7,linestyle=linestyles[k],
+                        linewidth=0.8,zorder=1)
+                    ax_list[-1].scatter(
+                        x,y,label=key,color=colors[k],
+                        alpha=.8,s=1.5,zorder=1)
                 #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
         for i,ax in enumerate(ax_list):
             ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
@@ -1557,8 +1564,8 @@ class MultiCorrectionTool(myLogger):
             ax.set_title(f'{metric.upper()}')
             ax.vlines(scale_xticks,-1,1,color='w',alpha=0.5)
             for ii,(m_name,ser) in enumerate(m_ser_dict.items()):
-                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.8,label='_'+m_name,s=3.5)
-                ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.4,label=m_name,linewidth=0.7)
+                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.9,label='_'+m_name,s=2)
+                ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=0.7)
             if i>0:ax.legend()
             ax.set_ylim(bottom=0,top=1)
             ax.set_xticks(scale_xticks)
@@ -1664,7 +1671,7 @@ class MultiCorrectionTool(myLogger):
         plt.rcParams['axes.facecolor'] = 'lightgrey'
         fig=plt.figure(dpi=300,figsize=[9,4])
         fig.patch.set_facecolor('w')
-        fig.suptitle(f'Best Estimator Cross Validation Average Scores')
+        fig.suptitle(f'Out Of Sample Average Validation Scores')
         for i,metric in enumerate(best_model_df.columns.to_list()):
             ax=fig.add_subplot(1,2,i+1)
             ax.set_title(f'{metric.upper()}')

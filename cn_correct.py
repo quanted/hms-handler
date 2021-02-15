@@ -1424,7 +1424,9 @@ class MultiCorrectionTool(myLogger):
             name+='_sorted'
         if use_val_data:
             name+='_V'
-
+        if time_range:
+            
+            name+='_T'
 
         fig.savefig(os.path.join(self.mct_results_folder,name+'.tif'))
             

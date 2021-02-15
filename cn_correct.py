@@ -1063,7 +1063,7 @@ class MultiCorrectionTool(myLogger):
             self.modeldict={
                 'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
                 'model_geog':'section',
-                'sources':{'observed':'gldas','modeled':'gcn'}, 
+                'sources':{'observed':'nldas','modeled':'cn'}, 
                 'filter':'nonzero',#'none',
                 'train_share':0.50,
                 'val_share':0.25,#test_share is 1-train_share-val_share. validation is after model selection

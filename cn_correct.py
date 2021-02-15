@@ -1357,19 +1357,24 @@ class MultiCorrectionTool(myLogger):
             else:assert False,f'unexpected time_range:{time_range}'
         else:
             assert time_range is None or type(time_range) in [list,slice,np.ndarray],f'unexpected type for time_range:{type(time_range)}'
-        fig=plt.figure(dpi=300,figsize=[16,12])
-        fig.subplots_adjust(wspace=None,hspace=None)
+        fig=plt.figure(dpi=300,figsize=[10,12])#16,12
+        if sort:
+            pass
+        else:
+            fig.subplots_adjust(wspace=None,hspace=None)
         fig.patch.set_facecolor('w')
         if sort:
             sort_str=f" Sorted by {self.modeldict['sources']['observed'].upper()}"
         else:
             sort_str=''
         if name[-4]=='zero':
+            split_zero=True
             if name[-7:]=='nonzero':
                 fig.suptitle(f'Runoff{sort_str} For Uncorrected Zero Runoff Days',fontsize=14)
             else:
                 fig.suptitle(f'Runoff{sort_str} For Uncorrected NonZero Runoff Days',fontsize=14)
         else:
+            split_zero=False
             fig.suptitle(f'Daily Runoff{sort_str}',fontsize=14)
         colors = plt.get_cmap('tab10')(np.arange(10))
         linestyles=['-', '--', '-.', ':']
@@ -1412,20 +1417,20 @@ class MultiCorrectionTool(myLogger):
                         linewidth=2,zorder=0)
                     ax_list[-1].plot(
                         x,y,label=key,color=colors[k],
-                        alpha=.3,
+                        alpha=.2,
                         linewidth=6,zorder=0)
                 else:
                     ax_list[-1].plot(
                         x,y,label=key,color=colors[k],
-                        alpha=.7,linestyle=linestyles[k],
-                        linewidth=0.8,zorder=1)
+                        alpha=1,linestyle=linestyles[k],
+                        linewidth=1,zorder=1)
                     ax_list[-1].scatter(
                         x,y,label=key,color=colors[k],
                         alpha=.8,s=1.5,zorder=1)
                 #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
         for i,ax in enumerate(ax_list):
             ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
-            if i==0 or sort:
+            if i==0 or sort or split_zero:
                 if i==0:ax.legend()
                 #ax.set_xlabel('X LABEL')    
                 ax.xaxis.set_label_position('top') 
@@ -1565,9 +1570,9 @@ class MultiCorrectionTool(myLogger):
             ax.vlines(scale_xticks,-1,1,color='w',alpha=0.5)
             for ii,(m_name,ser) in enumerate(m_ser_dict.items()):
                 ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.9,label='_'+m_name,s=2)
-                ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=0.7)
+                ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1)
             if i>0:ax.legend()
-            ax.set_ylim(bottom=0,top=1)
+            ax.set_ylim(bottom=-0.15,top=0.85)
             ax.set_xticks(scale_xticks)
             
             ax.xaxis.set_major_formatter(ticker.NullFormatter())
@@ -1577,7 +1582,7 @@ class MultiCorrectionTool(myLogger):
             
             #ax.xaxis.set_tick_params(rotation=45,)
             
-            ax.xaxis.set_label_text('Sections Grouped by Divison ID')
+            if i>0:ax.xaxis.set_label_text('Sections Grouped by Divison ID')
             # labelcolor="r",)
             #for label in ax.xaxis.get_ticklabels():
             #    label.set_rotation(40)
@@ -1669,7 +1674,7 @@ class MultiCorrectionTool(myLogger):
         
         plt.rcParams['hatch.linewidth'] = 0.1
         plt.rcParams['axes.facecolor'] = 'lightgrey'
-        fig=plt.figure(dpi=300,figsize=[9,4])
+        fig=plt.figure(dpi=300,figsize=[9,3.7])
         fig.patch.set_facecolor('w')
         fig.suptitle(f'Out Of Sample Average Validation Scores')
         for i,metric in enumerate(best_model_df.columns.to_list()):

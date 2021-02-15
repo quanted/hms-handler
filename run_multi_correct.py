@@ -59,11 +59,12 @@ if __name__=='__main__':
             'fit_intercept':False,'n_alphas':50}
             },
 
-        #{f'ridge-{i}':{
-        #    'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
-        #    'max_poly_deg':i,'poly_search':False,
-        #    'fit_intercept':False,'alphas':l2_alphas
-        #    } for i in range(max_deg,max_deg+1)},
+        {f'ridge-{i}':{
+            'kwargs':{'max_iter':5000,'tol':1e-6},
+            'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
+            'max_poly_deg':i,'poly_search':False,
+            'fit_intercept':False,'alphas':l2_alphas
+            } for i in range(max_deg,max_deg+1)},
 
         {f'lin_reg-{i}':{
             'max_poly_deg':i,
@@ -71,12 +72,13 @@ if __name__=='__main__':
             'fit_intercept':False
             } for i in range(1,max_deg+1)},
 
-        #{f'elastic_net-{i}':{
-        #    'n_alpha':10,
-        #    'l1_ratio':l1_list,#list(1-np.logspace(-2,-.03,7)),
-        #    'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
-        #    'max_poly_deg':i,'poly_search':False,'fit_intercept':False
-        #    } for i in range(1,max_deg+1)},
+        {f'elastic_net-{i}':{
+            'kwargs':{'max_iter':5000,'tol':1e-6},
+            'n_alpha':10,
+            'l1_ratio':l1_list,#list(1-np.logspace(-2,-.03,7)),
+            'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
+            'max_poly_deg':i,'poly_search':False,'fit_intercept':False
+            } for i in range(1,max_deg+1)},
 
         {f'gbr-{n}_{l}_{s}_{d}':{
             'kwargs':{
@@ -98,9 +100,11 @@ if __name__=='__main__':
     mct.selectCorrections()
     mct.setCorrectionSelectionAccuracy()
     mct.setSortOrder()   
-    mct.plotCorrectionRunoffComparison()      
+    mct.plotCorrectionRunoffComparison()  
+    mct.plotCorrectionRunoffComparison(sort=True)
     mct.saveCorrectionSelectionTable() 
     mct.plotCorrectionResultLines()
+    mct.plotGeogHybridAccuracy(plot_negative=False)
             
     """{'stackingregressor':{
             'stack_specs':[

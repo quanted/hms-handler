@@ -1360,14 +1360,23 @@ class MultiCorrectionTool(myLogger):
         fig=plt.figure(dpi=300,figsize=[16,12])
         fig.subplots_adjust(wspace=None,hspace=None)
         fig.patch.set_facecolor('w')
-        
-        fig.suptitle(f'Runoff Time Series Top Scoring Section from Each Division',fontsize=14)
+        if sort:
+            sort_str=f" Sorted by {self.modeldict['sources']['observed'].upper()}"
+        else:
+            sort_str=''
+        if name[-4]=='zero':
+            if name[-7:]=='nonzero':
+                fig.suptitle(f'Runoff{sort_str} For Uncorrected Zero Runoff Days',fontsize=14)
+            else:
+                fig.suptitle(f'Runoff{sort_str} For Uncorrected NonZero Runoff Days',fontsize=14)
+        else:
+            fig.suptitle(f'Daily Runoff{sort_str}',fontsize=14)
         colors = plt.get_cmap('tab10')(np.arange(10))
         linestyles=['-', '--', '-.', ':']
         d_n=len(best_modelg_runoff_dict)
         ax_list=[]
         #back_ax=ax = fig.add_subplot(111) 
-    
+        
         for i,(mg,runoffdict) in enumerate(best_modelg_runoff_dict.items()):
             if i==0:
                 ax=fig.add_subplot(d_n,1,i+1)
@@ -1396,28 +1405,36 @@ class MultiCorrectionTool(myLogger):
                 #self.xlist.append(x)
                 #self.ylist.append(y)
                 #ax.grid('on', linestyle='--',alpha=0.7,color='w')
-                ax_list[-1].plot(
-                    x,y,label=key,color=colors[k],
-                    alpha=.7,linestyle=linestyles[k],
-                    linewidth=0.3)
+                if key==self.modeldict['sources']['observed']:
+                    ax_list[-1].plot(
+                        x,y,label=key,color=colors[k],
+                        alpha=.3,linestyle=linestyles[k],
+                        linewidth=2)
+                else:
+                    ax_list[-1].plot(
+                        x,y,'o-',label=key,color=colors[k],
+                        alpha=.8,linestyle=linestyles[k],
+                        linewidth=0.6)
                 #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
         for i,ax in enumerate(ax_list):
             ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
-            if i==0:
-                ax.legend()
+            if i==0 or sort:
+                if i==0:ax.legend()
                 #ax.set_xlabel('X LABEL')    
                 ax.xaxis.set_label_position('top') 
                 ax.xaxis.tick_top()
             else:
                 #pass
+                
                 ax.set_xticklabels([])
                 ax.set_xticks([])
         if use_val_data:
+            
             fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
         else:
             fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
         fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
-        fig.tight_layout()
+        #fig.tight_layout()
         fig.show()
 
         if sort:
@@ -1532,7 +1549,7 @@ class MultiCorrectionTool(myLogger):
         else:
             fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
            
-        fig.suptitle(f'Cross Validation Scores by Estimator for Sections, Grouped by Division ID')
+        fig.suptitle(f'Out Of Sample Average Validation Scores')
         colors = plt.get_cmap('tab10')(np.arange(10))
         for i,metric in enumerate(metrics):
             #ax=fig.add_subplot(2,1,i+1)
@@ -1540,10 +1557,10 @@ class MultiCorrectionTool(myLogger):
             ax.set_title(f'{metric.upper()}')
             ax.vlines(scale_xticks,-1,1,color='w',alpha=0.5)
             for ii,(m_name,ser) in enumerate(m_ser_dict.items()):
-                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.7,label='_'+m_name,s=2.5)
-                ax.plot(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.7,label=m_name,linewidth=0.7)
-            ax.legend()
-            ax.set_ylim(bottom=-1,top=1)
+                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.8,label='_'+m_name,s=3.5)
+                ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.4,label=m_name,linewidth=0.7)
+            if i>0:ax.legend()
+            ax.set_ylim(bottom=0,top=1)
             ax.set_xticks(scale_xticks)
             
             ax.xaxis.set_major_formatter(ticker.NullFormatter())
@@ -1553,7 +1570,7 @@ class MultiCorrectionTool(myLogger):
             
             #ax.xaxis.set_tick_params(rotation=45,)
             
-            #ax.xaxis.set_label_text(self.model_scale)
+            ax.xaxis.set_label_text('Sections Grouped by Divison ID')
             # labelcolor="r",)
             #for label in ax.xaxis.get_ticklabels():
             #    label.set_rotation(40)
@@ -1684,12 +1701,17 @@ class MultiCorrectionTool(myLogger):
                 #self.geog_gdf=pos_hybrid_geog
                 #self.geog_gdf_neg=neg_geog_acc_df
             self.add_states(ax)
+            ax.set_xticklabels([])
+            ax.set_xticks([])
+            ax.set_yticklabels([])
+            ax.set_yticks([])
         fig_name=f'{self.model_scale}_hybrid-select_combined.tif'
         if not plot_negative:
             fig_name='pos-score_'+fig_name
             #ax.legend()
             #ax.add_artist(negleg)
         fig_name='cv_'+cmap+fig_name
+        fig.tight_layout()
         plt.show()
         fig.savefig(os.path.join(self.mct_results_folder,fig_name))   
     

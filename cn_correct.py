@@ -1356,7 +1356,7 @@ class MultiCorrectionTool(myLogger):
                 time_range=slice(-365,None)
             else:assert False,f'unexpected time_range:{time_range}'
         else:
-            assert tiem_range is None or type(time_range) in [list,slice,np.ndarray],f'unexpected type for time_range:{type(time_range)}'
+            assert time_range is None or type(time_range) in [list,slice,np.ndarray],f'unexpected type for time_range:{type(time_range)}'
         fig=plt.figure(dpi=300,figsize=[16,12])
         fig.subplots_adjust(wspace=None,hspace=None)
         fig.patch.set_facecolor('w')

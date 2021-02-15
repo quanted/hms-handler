@@ -1357,7 +1357,7 @@ class MultiCorrectionTool(myLogger):
         else:
             self.makeRunoffPlot(best_modelg_runoff_dict,name,sort)
         
-    def makeRunoffPlot(self,best_modelg_runoff_dict,name,sort)
+    def makeRunoffPlot(self,best_modelg_runoff_dict,name,sort):
             for i,(mg,runoffdict) in enumerate(best_modelg_runoff_dict.items()):
                 if i==0:
                     ax=fig.add_subplot(d_n,1,i+1)

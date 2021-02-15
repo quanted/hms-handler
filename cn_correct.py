@@ -1300,7 +1300,7 @@ class MultiCorrectionTool(myLogger):
                             else:
                             
                                 best_comid_runoff_dict[mg][obj.comid]={
-                                    'uncorrected':obj.x_test,
+                                    'uncorrected':obj.x_test.loc[:,self.modeldict['sources']['modeled']],
                                     self.modeldict['sources']['observed']:obj.y_test,
                                     'corrected':pd.concat([
                                         result_dict['yhat_test'] for result_dict in
@@ -1340,16 +1340,13 @@ class MultiCorrectionTool(myLogger):
         name='runoff-comparison'
         if split_zero:
             best_modelg_runoff_dict_nonzero={};best_modelg_runoff_dict_zero={}
-            for g,c_dict in best_modelg_runoff_dict.items():
+            for g,g_dict in best_modelg_runoff_dict.items():
+                non_z_idx=g_dict['uncorrected']>0
                 best_modelg_runoff_dict_nonzero[g]={}
                 best_modelg_runoff_dict_zero[g]={}
-                for c,data_dict in c_dict.items():
-                    best_modelg_runoff_dict_nonzero[g][c]={}
-                    best_modelg_runoff_dict_zero[g][c]={}
-                    non_z_idx=data_dict['uncorrected']>0
-                    for r_name,r in data_dict.items():
-                        best_modelg_runoff_dict_nonzero[g][c][r_name]=r[~non_z_idx]
-                        best_modelg_runoff_dict_zero[g][c][r_name]=r[non_z_idx]
+                for r_name,r_ser in g_dict.items():
+                    best_modelg_runoff_dict_nonzero[g][r_name]=r_ser[~non_z_idx]
+                    best_modelg_runoff_dict_zero[g][r_name]=r_ser[non_z_idx]
                         
             
             self.makeRunoffPlot(best_modelg_runoff_dict_zero,name+'-zero',sort)

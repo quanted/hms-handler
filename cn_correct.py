@@ -1099,7 +1099,7 @@ class MultiCorrectionTool(myLogger):
             model_dict_list.append(new_model_dict)
         kwargs_list=[{'modeldict':md} for md in model_dict_list]
         args_list=[[] for _ in range(len(model_dict_list))]
-        self.corrections=MpHelper().runAsMultiProc(CompareCorrect,args_list,kwargs_list=kwargs_list,proc_count=3)
+        self.corrections=MpHelper().runAsMultiProc(CompareCorrect,args_list,kwargs_list=kwargs_list,proc_count=1)
         if self.plot:
             for cc in self.corrections:
                 #cc.runBigModel()
@@ -1245,7 +1245,7 @@ class MultiCorrectionTool(myLogger):
         
         
     
-    def plotCorrectionRunoffComparison(self,sort=False,use_val_data=True):
+    def plotCorrectionRunoffComparison(self,sort=False,use_val_data=True,split_zero=True):#,time_range=None):
         s_metric=self.selection_metric
         if use_val_data:
             div_top_idx=self.double_sort_index_V.to_series().groupby(
@@ -1337,65 +1337,86 @@ class MultiCorrectionTool(myLogger):
         #self.xlist=[]
         #self.ylist=[]
         #back_ax=ax = fig.add_subplot(111) 
-        for i,(mg,runoffdict) in enumerate(best_modelg_runoff_dict.items()):
-            if i==0:
-                ax=fig.add_subplot(d_n,1,i+1)
-                
-            else:
-                ax=fig.add_subplot(d_n,1,i+1)#,sharex=ax_list[0])
-                
-            ax_list.append(ax)
-            if sort:
-                sort_key=self.modeldict['sources']['observed']
-                np_sort_idx=runoffdict[sort_key].sort_index(inplace=False).to_numpy().argsort()
-                
-            for k,(key,df) in enumerate(runoffdict.items()):
-                #print(f'key:{key}, df.shape:{df.shape},df.head():{df.head()}')
-                """if sort:
-                    df=df.loc[sort_idx]#df.reindex(sort_idx)
+        name='runoff-comparison'
+        if split_zero:
+            best_modelg_runoff_dict_nonzero={};best_modelg_runoff_dict_zero={}
+            for g,c_dict in best_modelg_runoff_dict.items():
+                best_modelg_runoff_dict_nonzero[g]={}
+                best_modelg_runoff_dict_zero[g]={}
+                for c,data_dict in c_dict.items():
+                    best_modelg_runoff_dict_nonzero[g][c]={}
+                    best_modelg_runoff_dict_zero[g][c]={}
+                    non_z_idx=data_dict['uncorrected']>0
+                    for r_name,r in data_dict.items():
+                        best_modelg_runoff_dict_nonzero[g][c][r_name]=r[~non_z_idx]
+                        best_modelg_runoff_dict_zero[g][c][r_name]=r[non_z_idx]
+                        
+            
+            self.makeRunoffPlot(best_modelg_runoff_dict_zero,name+'-zero',sort)
+            self.makeRunoffPlot(best_modelg_runoff_dict_nonzero,name+'-nonzero',sort)
+        else:
+            self.makeRunoffPlot(best_modelg_runoff_dict,name,sort)
+        
+    def makeRunoffPlot(self,best_modelg_runoff_dict,name,sort)
+            for i,(mg,runoffdict) in enumerate(best_modelg_runoff_dict.items()):
+                if i==0:
+                    ax=fig.add_subplot(d_n,1,i+1)
+
                 else:
-                    df.sort_index(inplace=True)"""
-                df.sort_index(inplace=True)
-                x=df.index.to_numpy().ravel()#[-365:] #.tolist()
-                #y=df.to_numpy().ravel().tolist()[-430:]
-                y=np.log(df.to_numpy().ravel()+1)#.tolist()#[-365:]
+                    ax=fig.add_subplot(d_n,1,i+1)#,sharex=ax_list[0])
+
+                ax_list.append(ax)
                 if sort:
-                    x=np.arange(y.shape[0])#x[np_sort_idx]#.astype('object')
-                    y=y[np_sort_idx]
-                #self.xlist.append(x)
-                #self.ylist.append(y)
-                #ax.grid('on', linestyle='--',alpha=0.7,color='w')
-                ax_list[-1].plot(
-                    x,y,label=key,color=colors[k],
-                    alpha=.7,linestyle=linestyles[k],
-                    linewidth=0.3)
-                #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
-        for i,ax in enumerate(ax_list):
-            ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
-            if i==0:
-                ax.legend()
-                #ax.set_xlabel('X LABEL')    
-                ax.xaxis.set_label_position('top') 
-                ax.xaxis.tick_top()
+                    sort_key=self.modeldict['sources']['observed']
+                    np_sort_idx=runoffdict[sort_key].sort_index(inplace=False).to_numpy().argsort()
+
+                for k,(key,df) in enumerate(runoffdict.items()):
+                    #print(f'key:{key}, df.shape:{df.shape},df.head():{df.head()}')
+                    """if sort:
+                        df=df.loc[sort_idx]#df.reindex(sort_idx)
+                    else:
+                        df.sort_index(inplace=True)"""
+                    df.sort_index(inplace=True)
+                    x=df.index.to_numpy().ravel()#[-365:] #.tolist()
+                    #y=df.to_numpy().ravel().tolist()[-430:]
+                    y=np.log(df.to_numpy().ravel()+1)#.tolist()#[-365:]
+                    if sort:
+                        x=np.arange(y.shape[0])#x[np_sort_idx]#.astype('object')
+                        y=y[np_sort_idx]
+                    #self.xlist.append(x)
+                    #self.ylist.append(y)
+                    #ax.grid('on', linestyle='--',alpha=0.7,color='w')
+                    ax_list[-1].plot(
+                        x,y,label=key,color=colors[k],
+                        alpha=.7,linestyle=linestyles[k],
+                        linewidth=0.3)
+                    #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
+            for i,ax in enumerate(ax_list):
+                ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
+                if i==0:
+                    ax.legend()
+                    #ax.set_xlabel('X LABEL')    
+                    ax.xaxis.set_label_position('top') 
+                    ax.xaxis.tick_top()
+                else:
+                    #pass
+                    ax.set_xticklabels([])
+                    ax.set_xticks([])
+            if use_val_data:
+                fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
             else:
-                #pass
-                ax.set_xticklabels([])
-                ax.set_xticks([])
-        if use_val_data:
-            fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
-        else:
-            fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
-        fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
-        fig.tight_layout()
-        fig.show()
-        if use_val_data:
-            val_str='_V'
-        else:val_str=''
-        if sort:
-            name=f'runoff-comparison-sorted{val_str}.tif'
-        else:
-            name=f'runoff-comparison_{val_str}.tif'
-        fig.savefig(os.path.join(self.mct_results_folder,name))
+                fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
+            fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
+            fig.tight_layout()
+            fig.show()
+            
+            if sort:
+                name+='_sorted'
+            if use_val_data:
+                name+='_V'
+            
+            
+            fig.savefig(os.path.join(self.mct_results_folder,name+'.tif'))
             
                         
                                  

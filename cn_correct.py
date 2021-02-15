@@ -825,7 +825,7 @@ class CompareCorrect(myLogger):
             self.modeldict={
                 'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
                 'model_geog':'section',
-                'sources':{'observed':'nldas','modeled':'cn'}, #[observed,modeled]
+                'sources':{'observed':'gldas','modeled':'gcn'}, #[observed,modeled]
                 'filter':'nonzero',#'none',#'nonzero'
                 'train_share':0.50,
                 'val_share':0.25,#test_share is 1-train_share-val_share. validation is after model selection

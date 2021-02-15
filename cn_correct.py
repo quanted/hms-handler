@@ -1333,8 +1333,8 @@ class MultiCorrectionTool(myLogger):
                 best_modelg_runoff_dict_zero[g]={}
                 for r_name,r_ser in g_dict.items():
                     try:
-                        best_modelg_runoff_dict_nonzero[g][r_name]=r_ser[~non_z_idx]
-                        best_modelg_runoff_dict_zero[g][r_name]=r_ser[non_z_idx]
+                        best_modelg_runoff_dict_nonzero[g][r_name]=r_ser[non_z_idx]
+                        best_modelg_runoff_dict_zero[g][r_name]=r_ser[~non_z_idx]
                     except:
                         print(f'error for r_name:{r_name}, r_ser:{r_ser}','traceback:')
                         print(traceback_exc())

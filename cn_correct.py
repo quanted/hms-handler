@@ -1341,7 +1341,7 @@ class MultiCorrectionTool(myLogger):
             
             self.makeRunoffPlot(
                 best_modelg_runoff_dict_zero,base_name+'-zero',
-                Sscale_best_modelg,sort,use_val_data,time_range)
+                scale_best_modelg,sort,use_val_data,time_range)
             self.makeRunoffPlot(
                 best_modelg_runoff_dict_nonzero,base_name+'-nonzero',
                 scale_best_modelg,sort,use_val_data,time_range)

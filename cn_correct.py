@@ -1447,9 +1447,9 @@ class MultiCorrectionTool(myLogger):
                 #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
         for i,ax in enumerate(ax_list):
             ax.tick_params(direction="in")
-            ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=10, labelpad=35)
+            ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=8, labelpad=35)
+            if i==0:ax.legend(ncol=len(runoffdict),bbox_to_anchor=(.5, 1.05))
             if i==0 or sort or split_zero:
-                if i==0:ax.legend(ncol=len(runoffdict),bbox_to_anchor=(.5, 1.05))
                 #ax.set_xlabel('X LABEL')    
                 ax.xaxis.set_label_position('top') 
                 ax.xaxis.tick_top()
@@ -1460,7 +1460,7 @@ class MultiCorrectionTool(myLogger):
                 #pass
                 
                 ax.set_xticklabels([])
-                ax.set_xticks([])
+                #ax.set_xticks([])
         
 
         if sort:
@@ -1586,7 +1586,7 @@ class MultiCorrectionTool(myLogger):
                 ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.9,label='_'+m_name,s=2)
                 ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1)
             if i>0:ax.legend()
-            ax.set_ylim(bottom=-0.2)
+            ax.set_ylim(bottom=-0.2,top=1)
             ax.set_xticks(scale_xticks)
             
             ax.xaxis.set_major_formatter(ticker.NullFormatter())

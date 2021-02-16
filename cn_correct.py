@@ -822,6 +822,7 @@ class CompareCorrect(myLogger):
         if not os.path.exists('results'):
             os.mkdir('results')
         if modeldict is None:
+            max_deg=5
             self.modeldict={
                 'cross_validate':{'n_reps':3,'strategy':'leave_one_member_out'},#False,#
                 'model_geog':'section',
@@ -831,18 +832,12 @@ class CompareCorrect(myLogger):
                 'val_share':0.25,#test_share is 1-train_share-val_share. validation is after model selection
                 'split_order':'chronological',#'random'
                 'model_scale':'division',#'division',#'comid'
-                'model_specs':{
-                    #no intercept b/c no dummy drop
-                    'lasso':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
-                    'gbr':{
-                        'kwargs':{},#these pass through to sklearn's gbr
-                        #'n_estimators':10000,
-                        #'subsample':1,
-                        #'max_depth':3
-                    },
-                    'lin-reg':{'max_poly_deg':3,'fit_intercept':False,'inner_cv':{'n_repeats':3,'n_splits':10,'n_jobs':1}},
-                }
-            } 
+                'model_specs':{f'lin_reg-{i}':{
+                    'max_poly_deg':i,
+                    'poly_search':False,
+                    'fit_intercept':False
+                    } for i in range(1,max_deg+1)}
+                } 
         else:
             self.modeldict=modeldict
         if not model_specs is None:
@@ -932,19 +927,26 @@ class CompareCorrect(myLogger):
                         data_dict[m_name][geog].append(self.comid_geog_dict[obj.comid][geog])
         self.dc_val_dict=data_dict
     
-    def plotGeoTestData(self,plot_negative=True):
+    def plotGeoTestData(self,plot_negative=True,use_val_data=True):
         try: self.eco_geog
         except: self.setEcoGeog()
         try: self.dc_test_dict
         except: self.setDCTestDict()
         geog=self.modeldict['model_geog']
-        for m_name,m_data_dict in self.dc_test_dict.items():            
+        if use_val_data:
+            dc_data_dict=self.dc_val_dict
+        else:
+            dc_data_dict=self.dct_test_dict
+        for m_name,m_data_dict in dc_data_dict.items():            
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog,how='left')
             plt.rcParams['axes.facecolor'] = 'lightgrey'
-            fig=plt.figure(dpi=300,figsize=[9,4])
+            fig=plt.figure(dpi=300,figsize=[9,3.7])
             fig.patch.set_facecolor('w')
-            fig.suptitle(f'Cross Validation Scores for {m_name.upper()}')
+            if use_val_data:
+                fig.suptitle(f'Validation Scores for {m_name.upper()}')
+            else:
+                fig.suptitle(f'Test Scores for {m_name.upper()}')
             for i,metric in enumerate(['nse','pearson']):
                 
                 

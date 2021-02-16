@@ -980,6 +980,10 @@ class CompareCorrect(myLogger):
                     "label": "Missing values",},legend_kwds={'orientation': "horizontal"})
                     #fig.colorbar(cbar,ax=ax)
                 self.add_states(ax)
+                ax.set_xticklabels([])
+                ax.set_xticks([])
+                ax.set_yticklabels([])
+                ax.set_yticks([])
             fig_name=f'{self.modeldict["model_scale"]}_{m_name}.tif'
             if not plot_negative:
                 fig_name='pos-score_'+fig_name

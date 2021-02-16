@@ -31,13 +31,21 @@ if __name__=='__main__':
                 }
             },
         ]
+    max_deg=5
+    model_spec_list=[
+        {f'lin_reg-{i}':{
+            'max_poly_deg':i,
+            'poly_search':False,
+            'fit_intercept':False
+            } for i in range(1,max_deg+1)}
+    ]
     for model_spec in model_spec_list:
         try:
             cc=CC(model_specs=model_spec)
             print('modeldict',cc.modeldict)
             cc.runBigModel()
             cc.plotGeoTestData(plot_negative=False)
-            cc.plotGeoTestData(plot_negative=True)
+            #cc.plotGeoTestData(plot_negative=True)
             print('complete')
         except:
             print(format_exc())

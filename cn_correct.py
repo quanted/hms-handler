@@ -1357,25 +1357,34 @@ class MultiCorrectionTool(myLogger):
             else:assert False,f'unexpected time_range:{time_range}'
         else:
             assert time_range is None or type(time_range) in [list,slice,np.ndarray],f'unexpected type for time_range:{type(time_range)}'
-        fig=plt.figure(dpi=300,figsize=[10,12])#16,12
-        if sort:
-            pass
+        fig=plt.figure(dpi=300,figsize=[10,11])#16,12
+        if use_val_data:
+            
+            fig.text(0.5, 0.95, 'Validation Data', ha='center', va='center')
         else:
-            fig.subplots_adjust(wspace=None,hspace=None)
+            fig.text(0.5, 0.95, 'Test Data', ha='center', va='center')
+        fig.text(0.95, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
+        
+        
+        if sort or name[-4:]=='zero':
+            fig.subplots_adjust(hspace=0.2)
+        else:
+            fig.subplots_adjust(hspace=None)
         fig.patch.set_facecolor('w')
         if sort:
             sort_str=f" Sorted by {self.modeldict['sources']['observed'].upper()}"
         else:
             sort_str=''
-        if name[-4]=='zero':
-            split_zero=True
+        if name[-4:]=='zero':
             if name[-7:]=='nonzero':
-                fig.suptitle(f'Runoff{sort_str} For Uncorrected Zero Runoff Days',fontsize=14)
+                split_zero='nonzero'
+                fig.suptitle(f'Runoff{sort_str} For Uncorrected NonZero Runoff Days',fontsize=12)
             else:
-                fig.suptitle(f'Runoff{sort_str} For Uncorrected NonZero Runoff Days',fontsize=14)
+                split_zero='zero'
+                fig.suptitle(f'Runoff{sort_str} For Uncorrected Zero Runoff Days',fontsize=12)
         else:
             split_zero=False
-            fig.suptitle(f'Daily Runoff{sort_str}',fontsize=14)
+            fig.suptitle(f'Daily Runoff{sort_str}',fontsize=12)
         colors = plt.get_cmap('tab10')(np.arange(10))
         linestyles=['-', '--', '-.', ':']
         d_n=len(best_modelg_runoff_dict)
@@ -1388,7 +1397,7 @@ class MultiCorrectionTool(myLogger):
 
             else:
                 ax=fig.add_subplot(d_n,1,i+1)#,sharex=ax_list[0])
-
+            
             ax_list.append(ax)
             if sort:
                 sort_key=self.modeldict['sources']['observed']
@@ -1412,42 +1421,47 @@ class MultiCorrectionTool(myLogger):
                 #ax.grid('on', linestyle='--',alpha=0.7,color='w')
                 if key==self.modeldict['sources']['observed']:
                     ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
+                        x,y,color=colors[k],
                         alpha=1,
                         linewidth=2,zorder=0)
                     ax_list[-1].plot(
                         x,y,label=key,color=colors[k],
-                        alpha=.2,
-                        linewidth=6,zorder=0)
+                        alpha=.35,
+                        linewidth=5,zorder=0)
+                elif key=='uncorrected':#self.modeldict['sources']['modeled']:
+                    ax_list[-1].plot(
+                        x,y,label=key,color=colors[k],
+                        alpha=1,linestyle=linestyles[k],
+                        linewidth=1,zorder=2)
+                    ax_list[-1].scatter(
+                        x,y,color=colors[k],
+                        alpha=.8,s=1,zorder=2)
                 else:
                     ax_list[-1].plot(
                         x,y,label=key,color=colors[k],
                         alpha=1,linestyle=linestyles[k],
-                        linewidth=1,zorder=1)
+                        linewidth=1.5,zorder=1)
                     ax_list[-1].scatter(
-                        x,y,label=key,color=colors[k],
-                        alpha=.8,s=1.5,zorder=1)
+                        x,y,color=colors[k],
+                        alpha=.8,s=1.2,zorder=1)
                 #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
         for i,ax in enumerate(ax_list):
-            ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=11, labelpad=30)
+            ax.tick_params(direction="in")
+            ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=10, labelpad=35)
             if i==0 or sort or split_zero:
-                if i==0:ax.legend()
+                if i==0:ax.legend(ncol=len(runoffdict),bbox_to_anchor=(.5, 1.05))
                 #ax.set_xlabel('X LABEL')    
                 ax.xaxis.set_label_position('top') 
                 ax.xaxis.tick_top()
+                for tick in ax.xaxis.get_major_ticks():
+                    tick.label.set_fontsize(7) 
+                    tick.set_pad(-10)
             else:
                 #pass
                 
                 ax.set_xticklabels([])
                 ax.set_xticks([])
-        if use_val_data:
-            
-            fig.text(0.5, 1.02, 'Validation Data', ha='center', va='center')
-        else:
-            fig.text(0.5, 1.02, 'Test Data', ha='center', va='center')
-        fig.text(-0.02, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
-        #fig.tight_layout()
-        fig.show()
+        
 
         if sort:
             name+='_sorted'
@@ -1572,7 +1586,7 @@ class MultiCorrectionTool(myLogger):
                 ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.9,label='_'+m_name,s=2)
                 ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1)
             if i>0:ax.legend()
-            ax.set_ylim(bottom=-0.15,top=0.85)
+            ax.set_ylim(bottom=-0.2)
             ax.set_xticks(scale_xticks)
             
             ax.xaxis.set_major_formatter(ticker.NullFormatter())
@@ -1648,7 +1662,7 @@ class MultiCorrectionTool(myLogger):
                 #'ID':list(range(len(selections)))
             },index=geogs_with_id)
         correction_selection_score.to_csv(os.path.join(self.mct_results_folder,f'correction_selection_score_{hash_id}{val_str}.csv'))
-        correction_selection_score.to_html(os.path.join(self.mct_results_folder,f'correction_selection_score_{hash_id}{val_str}.html'))
+        correction_selection_score.round(decimals=3).to_html(os.path.join(self.mct_results_folder,f'correction_selection_score_{hash_id}{val_str}.html'))
     
     
      
@@ -1676,7 +1690,7 @@ class MultiCorrectionTool(myLogger):
         plt.rcParams['axes.facecolor'] = 'lightgrey'
         fig=plt.figure(dpi=300,figsize=[9,3.7])
         fig.patch.set_facecolor('w')
-        fig.suptitle(f'Out Of Sample Average Validation Scores')
+        fig.suptitle(f'Best Corrected Model Out Of Sample Average Validation Scores')
         for i,metric in enumerate(best_model_df.columns.to_list()):
             ax=fig.add_subplot(1,2,i+1)
             ax.set_title(f'{metric.upper()}')

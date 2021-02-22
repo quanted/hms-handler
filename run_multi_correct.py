@@ -95,13 +95,13 @@ if __name__=='__main__':
 
         
     mct=MCT(model_specs=model_spec_list,plot=False)
-    mct.runCorrections()
+    #mct.runCorrections()
     mct.buildCorrectionResultsDF()
     mct.selectCorrections()
     mct.setCorrectionSelectionAccuracy()
     mct.setSortOrder()   
     mct.plotCorrectionRunoffComparison()
-    #mct.plotCorrectionRunoffComparison(split_zero=False)
+    mct.plotCorrectionRunoffComparison(split_zero=False)
     mct.plotCorrectionRunoffComparison(sort=True)
     mct.plotCorrectionRunoffComparison(time_range=slice(-365,None))
     mct.plotCorrectionRunoffComparison(split_zero=False,time_range=slice(-365,None))

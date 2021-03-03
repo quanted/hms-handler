@@ -1331,32 +1331,55 @@ class MultiCorrectionTool(myLogger):
                
            
         base_name='runoff-comparison'
+        event_dict={}
         if split_zero:
             best_modelg_runoff_dict_nonzero={};best_modelg_runoff_dict_zero={}
-            for g,g_dict in best_modelg_runoff_dict.items():
-                non_z_idx=g_dict['uncorrected']>0
+        for g,g_dict in best_modelg_runoff_dict.items():
+            non_z_bool=g_dict['uncorrected']>0
+            event_start_stop=pd.Series(
+                data=non_z_bool.iloc[1:].to_numpy(dtype=int)-
+                non_z_bool.iloc[:-1].to_numpy(dtype=int),
+                index=non_z_bool.index.to_list()[1:])
+            #non_z_bool.diff().astype('bool')#.to_numpy() # XOR logic in diff
+            #print('event_start_stop',event_start_stop)
+            stops=event_start_stop==-1
+            start_dates=event_start_stop[event_start_stop==1].index.to_list()
+            stop_dates=event_start_stop[event_start_stop==-1].index.to_list()
+            #event_bool.iloc[0]=False #instead of nan
+            #print('event_bool',event_bool)
+            #event_bool.index=non_z_bool.index
+            startstop_dict={'start':start_dates,'stop':stop_dates,'stops':stops}
+            #print('startstop_dict:',startstop_dict)
+            #events=#get_level_values('date').to_list()#
+            #print('events',events)
+            event_dict[g]=startstop_dict
+            if split_zero:
                 best_modelg_runoff_dict_nonzero[g]={}
                 best_modelg_runoff_dict_zero[g]={}
                 for r_name,r_ser in g_dict.items():
                     try:
-                        best_modelg_runoff_dict_nonzero[g][r_name]=r_ser[non_z_idx]
-                        best_modelg_runoff_dict_zero[g][r_name]=r_ser[~non_z_idx]
+                        
+                    
+                        best_modelg_runoff_dict_nonzero[g][r_name]=r_ser[non_z_bool]
+                        #r_ser.iloc[1:][non_z_bool.iloc[1:]]|stops]
+                        best_modelg_runoff_dict_zero[g][r_name]=r_ser[~non_z_bool]
+                        
                     except:
                         print(f'error for r_name:{r_name}, r_ser:{r_ser}','traceback:')
                         print(traceback_exc())
-            
+        if split_zero:     
             self.makeRunoffPlot(
                 best_modelg_runoff_dict_zero,base_name+'-zero',
-                scale_best_modelg,sort,use_val_data,time_range)
+                scale_best_modelg,sort,use_val_data,time_range,event_dict)
             self.makeRunoffPlot(
                 best_modelg_runoff_dict_nonzero,base_name+'-nonzero',
-                scale_best_modelg,sort,use_val_data,time_range)
+                scale_best_modelg,sort,use_val_data,time_range,event_dict)
         else:
             self.makeRunoffPlot(
                 best_modelg_runoff_dict,base_name,
-                scale_best_modelg,sort,use_val_data,time_range)
+                scale_best_modelg,sort,use_val_data,time_range,event_dict)
         
-    def makeRunoffPlot(self,best_modelg_runoff_dict,name,scale_best_modelg,sort,use_val_data,time_range):
+    def makeRunoffPlot(self,best_modelg_runoff_dict,name,scale_best_modelg,sort,use_val_data,time_range,event_dict):
         if type(time_range) is str:
             if time_range=='last year':
                 time_range=slice(-365,None)
@@ -1411,8 +1434,11 @@ class MultiCorrectionTool(myLogger):
                     np_sort_idx=runoffdict[sort_key][time_range].sort_index(inplace=False).to_numpy().argsort()
                 else:
                     np_sort_idx=runoffdict[sort_key].sort_index(inplace=False).to_numpy().argsort()
-
+            
+            df_max=0
             for k,(key,df) in enumerate(runoffdict.items()):
+                this_max=np.log(1+df.max())
+                if this_max>df_max:df_max=this_max
                 df.sort_index(inplace=True)
                 x=df.index.to_numpy().ravel()
                 y=np.log(df.to_numpy().ravel()+1)
@@ -1422,40 +1448,91 @@ class MultiCorrectionTool(myLogger):
                 if sort:
                     x=np.arange(x.shape[0])
                     y=y[np_sort_idx]
+                else:
+                    if split_zero:
+                        x=np.arange(x.shape[0])#x.astype(str) #to prevent automatic time gap filling and interpolation
                 #self.xlist.append(x)
                 #self.ylist.append(y)
                 #ax.grid('on', linestyle='--',alpha=0.7,color='w')
                 if key==self.modeldict['sources']['observed']:
-                    ax_list[-1].plot(
+                    """ax_list[-1].plot(
                         x,y,color=colors[k],
                         alpha=1,
-                        linewidth=2,zorder=0)
+                        linewidth=2,zorder=0)"""
                     ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
-                        alpha=.35,
-                        linewidth=5,zorder=0)
-                elif key=='uncorrected':#self.modeldict['sources']['modeled']:
-                    ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
-                        alpha=1,linestyle=linestyles[k],
-                        linewidth=1,zorder=2)
+                        x,y,color=colors[k],
+                        alpha=.5,
+                        linewidth=3,zorder=0)
                     ax_list[-1].scatter(
                         x,y,color=colors[k],
-                        alpha=.8,s=1,zorder=2)
+                        alpha=.7,s=2,zorder=2)
+                    ax_list[-1].plot(#just for the legend
+                        [],[],'o-',label=key,color=colors[k],
+                        alpha=.5,linewidth=3,zorder=0)
+                elif key=='uncorrected':#self.modeldict['sources']['modeled']:
+                    ax_list[-1].plot(
+                        x,y,color=colors[k],
+                        alpha=.8,linestyle=linestyles[k],
+                        linewidth=.4,zorder=3)
+                    ax_list[-1].plot(#just for the legend
+                        [],[],'o-',label=key,color=colors[k],
+                        alpha=.8,linestyle=linestyles[k],
+                        linewidth=.4,zorder=3)
+                    ax_list[-1].scatter(
+                        x,y,color=colors[k],
+                        alpha=.7,s=1.3,zorder=3)
                 else:
                     ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
+                        x,y,color=colors[k],
+                        alpha=.9,linestyle=linestyles[k],
+                        linewidth=1,zorder=1)
+                    ax_list[-1].plot(#just for the legend
+                        [],[],'*-',label=key,color=colors[k],
                         alpha=1,linestyle=linestyles[k],
                         linewidth=1.5,zorder=1)
                     ax_list[-1].scatter(
-                        x,y,color=colors[k],
-                        alpha=.8,s=1.2,zorder=1)
+                        x,y,marker='*',color=colors[k],
+                        alpha=.8,s=2,zorder=3)
+                    """if split_zero=='nonzero':
+                        df_=df.copy()
+                        if time_range:
+                            df_=df_.loc[time_range,:]
+                        stops=event_dict[mg]['stops']
+                        df_.loc[stops.index,'stops']=0
+                        df_.reset_index(inplace=True,drop=False)
+                        stops_idx=df_[df_.loc[:,'stops']==0].index.to_numpy()"""
+                   
+                    
                 #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
+                """if not sort and k==len(runoffdict)-1:#just do once...
+                    #dict.fromkeys(df.index.get_level_values('date').to_list())
+                    start_dates=[e-pd.Timedelta(hours=12) for e in event_dict[mg]['start'] if e in x]
+                    stop_dates=[e+pd.Timedelta(hours=12) for e in event_dict[mg]['stop'] if e in x]
+                    #print(f'adding {len(event_dates)} vlines. df_max:{df_max}')
+                    if not split_zero=='zero':
+                        ax_list[-1].vlines(
+                            np.array(start_dates),0,df_max,
+                            color='r',linewidth=.2,alpha=0.5,
+                            #linestyle='dotted',
+                            zorder=0,label='CN Event Starts')
+                    if not split_zero=='nonzero':
+                        ax_list[-1].vlines(
+                            np.array(stop_dates),0,df_max,
+                            color='k',linewidth=.2,alpha=0.5,
+                            #linestyle='dotted',
+                            zorder=0,label='CN Event Ends')"""
         for i,ax in enumerate(ax_list):
+            
             ax.tick_params(direction="in")
             ax.set_ylabel(f'{scale_best_modelg[i]}',rotation=60, fontsize=8, labelpad=35)
-            if i==0:ax.legend(ncol=len(runoffdict),bbox_to_anchor=(.5, 1.05))
-            if i==0 or sort or split_zero:
+            if not sort:
+                if split_zero:
+                    if i==0:ax.legend(ncol=len(runoffdict)+1,bbox_to_anchor=(0.5, 1.1))
+                else:
+                    if i==0:ax.legend(ncol=len(runoffdict)+2,bbox_to_anchor=(0.5, 1.1))
+            else:
+                if i==0:ax.legend(ncol=len(runoffdict),bbox_to_anchor=(0.5, 1.1))
+            if True:#i==0 or sort or split_zero:
                 #ax.set_xlabel('X LABEL')    
                 ax.xaxis.set_label_position('top') 
                 ax.xaxis.tick_top()
@@ -1567,11 +1644,6 @@ class MultiCorrectionTool(myLogger):
             ser.index=ser.index.get_level_values(self.model_geog)
             m_ser_dict[m]=ser.reindex(sort_idx) #sorted 
             
-            
-            
-        
-        
-        
         plt.rcParams['hatch.linewidth'] = 0.1
         plt.rcParams['axes.facecolor'] = 'lightgrey'
         fig=plt.figure(dpi=300,figsize=[9,8])
@@ -1589,7 +1661,7 @@ class MultiCorrectionTool(myLogger):
             ax.set_title(f'{metric.upper()}')
             ax.vlines(scale_xticks,-1,1,color='w',alpha=0.5)
             for ii,(m_name,ser) in enumerate(m_ser_dict.items()):
-                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.9,label='_'+m_name,s=2)
+                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.7,label='_'+m_name,s=2)
                 ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1)
             if i>0:ax.legend()
             ax.set_ylim(bottom=-0.2,top=1)

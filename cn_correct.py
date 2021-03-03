@@ -1455,38 +1455,52 @@ class MultiCorrectionTool(myLogger):
                 #self.ylist.append(y)
                 #ax.grid('on', linestyle='--',alpha=0.7,color='w')
                 if key==self.modeldict['sources']['observed']:
-                    ax_list[-1].plot(
+                    """ax_list[-1].plot(
                         x,y,color=colors[k],
                         alpha=1,
-                        linewidth=2,zorder=0)
+                        linewidth=2,zorder=0)"""
                     ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
-                        alpha=.35,
-                        linewidth=5,zorder=0)
-                elif key=='uncorrected':#self.modeldict['sources']['modeled']:
-                    ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
-                        alpha=1,linestyle=linestyles[k],
-                        linewidth=.7,zorder=2)
+                        x,y,color=colors[k],
+                        alpha=.5,
+                        linewidth=3,zorder=0)
                     ax_list[-1].scatter(
                         x,y,color=colors[k],
-                        alpha=.7,s=1,zorder=2)
+                        alpha=.7,s=2,zorder=2)
+                    ax_list[-1].plot(#just for the legend
+                        [],[],'o-',label=key,color=colors[k],
+                        alpha=.5,linewidth=3,zorder=0)
+                elif key=='uncorrected':#self.modeldict['sources']['modeled']:
+                    ax_list[-1].plot(
+                        x,y,color=colors[k],
+                        alpha=.8,linestyle=linestyles[k],
+                        linewidth=.4,zorder=3)
+                    ax_list[-1].plot(#just for the legend
+                        [],[],'o-',label=key,color=colors[k],
+                        alpha=.8,linestyle=linestyles[k],
+                        linewidth=.4,zorder=3)
+                    ax_list[-1].scatter(
+                        x,y,color=colors[k],
+                        alpha=.7,s=1.3,zorder=3)
                 else:
                     ax_list[-1].plot(
-                        x,y,label=key,color=colors[k],
+                        x,y,color=colors[k],
+                        alpha=.9,linestyle=linestyles[k],
+                        linewidth=1,zorder=1)
+                    ax_list[-1].plot(#just for the legend
+                        [],[],'*-',label=key,color=colors[k],
                         alpha=1,linestyle=linestyles[k],
                         linewidth=1.5,zorder=1)
                     ax_list[-1].scatter(
-                        x,y,color=colors[k],
-                        alpha=.8,s=1.2,zorder=1)
-                    if split_zero=='nonzero':
+                        x,y,marker='*',color=colors[k],
+                        alpha=.8,s=2,zorder=3)
+                    """if split_zero=='nonzero':
                         df_=df.copy()
                         if time_range:
                             df_=df_.loc[time_range,:]
                         stops=event_dict[mg]['stops']
                         df_.loc[stops.index,'stops']=0
                         df_.reset_index(inplace=True,drop=False)
-                        stops_idx=df_[df_.loc[:,'stops']==0].index.to_numpy()
+                        stops_idx=df_[df_.loc[:,'stops']==0].index.to_numpy()"""
                    
                     
                 #ser.plot(ax=ax_list[-1],color=colors[k],label=key)
@@ -1518,7 +1532,7 @@ class MultiCorrectionTool(myLogger):
                     if i==0:ax.legend(ncol=len(runoffdict)+2,bbox_to_anchor=(0.5, 1.1))
             else:
                 if i==0:ax.legend(ncol=len(runoffdict),bbox_to_anchor=(0.5, 1.1))
-            if i==0 or sort or split_zero:
+            if True:#i==0 or sort or split_zero:
                 #ax.set_xlabel('X LABEL')    
                 ax.xaxis.set_label_position('top') 
                 ax.xaxis.tick_top()
@@ -1647,7 +1661,7 @@ class MultiCorrectionTool(myLogger):
             ax.set_title(f'{metric.upper()}')
             ax.vlines(scale_xticks,-1,1,color='w',alpha=0.5)
             for ii,(m_name,ser) in enumerate(m_ser_dict.items()):
-                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.9,label='_'+m_name,s=2)
+                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.7,label='_'+m_name,s=2)
                 ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1)
             if i>0:ax.legend()
             ax.set_ylim(bottom=-0.2,top=1)

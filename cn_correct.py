@@ -1664,7 +1664,7 @@ class MultiCorrectionTool(myLogger):
                 ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.7,label='_'+m_name,s=2)
                 ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1)
             if i>0:ax.legend()
-            ax.set_ylim(bottom=-0.2,top=1)
+            ax.set_ylim(bottom=-1,top=1)
             ax.set_xticks(scale_xticks)
             
             ax.xaxis.set_major_formatter(ticker.NullFormatter())

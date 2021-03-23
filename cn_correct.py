@@ -1102,9 +1102,9 @@ class MultiCorrectionTool(myLogger):
         if not os.path.exists(self.mct_results_folder):
             os.makedirs(self.mct_results_folder)
         
-    def runCorrections(self,):
+    def runCorrections(self,load=True):
         name=os.path.join(self.mct_results_folder,f'corrections-{self.hash_id}.pkl')
-        if os.path.exists(name):
+        if os.path.exists(name) and load:
             try:
                 with open(name,'rb') as f:
                     self.corrections=pickle.load(f)

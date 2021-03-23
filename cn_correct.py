@@ -985,6 +985,18 @@ class CompareCorrect(myLogger):
                 ax.set_xticks([])
                 ax.set_yticklabels([])
                 ax.set_yticks([])
+                if i==0:
+                    handles, labels = ax.get_legend_handles_labels()
+                    handles=[
+                        *handles,
+                        mpatches.Patch(
+                            hatch='xxxxxxxxx',facecolor='lightgrey',
+                            label='<100 CN event days'),
+                        mpatches.Patch(
+                            hatch='oooooo',facecolor='lightgrey', 
+                            label='negative score'),
+                    ]
+                    ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.25,0.15),frameon=False)
             fig_name=f'{self.modeldict["model_scale"]}_{m_name}.tif'
             if not plot_negative:
                 fig_name='pos-score_'+fig_name
@@ -1042,7 +1054,7 @@ class CompareCorrect(myLogger):
         return comid_geog_dict
     
     
-        
+        F
         
     def add_states(self,ax):
         try: self.eco_clip_states
@@ -1822,12 +1834,12 @@ class MultiCorrectionTool(myLogger):
                     *handles,
                     mpatches.Patch(
                         hatch='xxxxxxxxx',facecolor='lightgrey',
-                        label='missing value'),
+                        label='<100 CN event days'),
                     mpatches.Patch(
                         hatch='oooooo',facecolor='lightgrey', 
                         label='negative score'),
                 ]
-                ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.25,0.15))
+                ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.25,0.15),frameon=False)
         fig_name=f'{self.model_scale}_hybrid-select_combined.tif'
         if not plot_negative:
             fig_name='pos-score_'+fig_name

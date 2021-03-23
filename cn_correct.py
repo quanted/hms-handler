@@ -937,7 +937,7 @@ class CompareCorrect(myLogger):
         if use_val_data:
             dc_data_dict=self.dc_val_dict
         else:
-            dc_data_dict=self.dct_test_dict
+            dc_data_dict=self.dc_test_dict
         for m_name,m_data_dict in dc_data_dict.items():            
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog,how='left')
@@ -962,7 +962,7 @@ class CompareCorrect(myLogger):
                     cmap='RdBu'#'brg'##'plasma'
                     cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
                     #self.geog_acc_df=geog_acc_df
-                    g=geog_acc_df.plot(column=metric,ax=ax, cmap=cmap, norm=norm,legend=True,missing_kwds={
+                    g=geog_acc_df.plot(column=metric,ax=ax, cmap=cmap,zorder=1, norm=norm,legend=True,missing_kwds={
                     "color": "lightgrey",
                     #"edgecolor": "red",
                     "hatch": "xxxxxxxxx",
@@ -973,7 +973,7 @@ class CompareCorrect(myLogger):
                     norm=Normalize(vmin=0,vmax=1)
                     cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
                     neg_geog_acc_df=geog_acc_df[(geog_acc_df.loc[:,metric]<=0)]
-                    ng=neg_geog_acc_df.plot(ax=ax,color='lightgrey',hatch='oooooo',zorder=1,label=f'non-positive {metric.upper()}',legend=True,legend_kwds={'orientation': "horizontal"})
+                    ng=neg_geog_acc_df.plot(ax=ax,color='lightgrey',hatch='oooooo',zorder=2,label=f'non-positive {metric.upper()}',legend=True,legend_kwds={'orientation': "horizontal"})
                     pos_geog_acc_df=geog_acc_df[~(geog_acc_df.loc[:,metric]<=0)] #includes nans
                     pg=pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',zorder=1,norm=norm,label=f'{metric}',legend=True,missing_kwds={
                     "color": "lightgrey",
@@ -997,7 +997,7 @@ class CompareCorrect(myLogger):
                             hatch='oooooo',facecolor='lightgrey', 
                             label='negative score'),
                     ]
-                    ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.25,0.15),frameon=False)
+                    ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.3,0.15),frameon=False)
             fig_name=f'{self.modeldict["model_scale"]}_{m_name}.tif'
             if not plot_negative:
                 fig_name='pos-score_'+fig_name
@@ -1055,7 +1055,7 @@ class CompareCorrect(myLogger):
         return comid_geog_dict
     
     
-        F
+        
         
     def add_states(self,ax):
         try: self.eco_clip_states
@@ -1788,7 +1788,7 @@ class MultiCorrectionTool(myLogger):
         plt.rcParams['axes.facecolor'] = 'lightgrey'
         fig=plt.figure(dpi=300,figsize=[9,3.7])
         fig.patch.set_facecolor('w')
-        fig.suptitle(f'Best Corrected Model Out Of Sample Average Validation Scores')
+        fig.suptitle(f'Best Correctedd Model Out Of Sample Average Validation Scores')
         for i,metric in enumerate(best_model_df.columns.to_list()):
             ax=fig.add_subplot(1,2,i+1)
             ax.set_title(f'{metric.upper()}')
@@ -1816,7 +1816,7 @@ class MultiCorrectionTool(myLogger):
                 #mapscheme=mapclassify.Quantiles(pos_hybrid_geog.loc[:,metric].to_numpy(),k=8).bins
                 """hybrid_geog.plot(column=metric,ax=ax,label=f'non-negative {metric.upper()}',missing_kwds={
                     "color": "lightgrey","edgecolor": "red","hatch": "///","label": "Missing values",},legend=True,scheme="User_Defined",classification_kwds={'bins':[0,.3,.45,.6,0.7,metric_series.max()]},legend_kwds={'loc': 'lower right'})"""
-                pos_hybrid_geog.plot(column=metric,ax=ax,cmap='plasma',norm=norm,label=f'{metric}',legend=True,missing_kwds={
+                pos_hybrid_geog.plot(column=metric,ax=ax,cmap='plasma',zorder=1,norm=norm,label=f'{metric}',legend=True,missing_kwds={
                     "color": "lightgrey",
                     #"edgecolor": "red",
                     "hatch": "xxxxxxxxx",
@@ -1840,7 +1840,7 @@ class MultiCorrectionTool(myLogger):
                         hatch='oooooo',facecolor='lightgrey', 
                         label='negative score'),
                 ]
-                ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.25,0.15),frameon=False)
+                ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.3,0.15),frameon=False)
         fig_name=f'{self.model_scale}_hybrid-select_combined.tif'
         if not plot_negative:
             fig_name='pos-score_'+fig_name

@@ -941,6 +941,7 @@ class CompareCorrect(myLogger):
         for m_name,m_data_dict in dc_data_dict.items():            
             mean_acc_df=pd.DataFrame(m_data_dict).groupby(geog).mean()
             geog_acc_df=self.eco_geog.merge(mean_acc_df,on=geog,how='left')
+            plt.rcParams['hatch.linewidth'] = 0.1
             plt.rcParams['axes.facecolor'] = 'lightgrey'
             fig=plt.figure(dpi=300,figsize=[9,3.7])
             fig.patch.set_facecolor('w')
@@ -972,9 +973,9 @@ class CompareCorrect(myLogger):
                     norm=Normalize(vmin=0,vmax=1)
                     cbar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
                     neg_geog_acc_df=geog_acc_df[(geog_acc_df.loc[:,metric]<=0)]
-                    ng=neg_geog_acc_df.plot(ax=ax,color='lightgrey',hatch='oooooo',zorder=1)
+                    ng=neg_geog_acc_df.plot(ax=ax,color='lightgrey',hatch='oooooo',zorder=1,label=f'non-positive {metric.upper()}',legend=True,legend_kwds={'orientation': "horizontal"})
                     pos_geog_acc_df=geog_acc_df[~(geog_acc_df.loc[:,metric]<=0)] #includes nans
-                    pg=pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',zorder=1,norm=norm,legend=True,missing_kwds={
+                    pg=pos_geog_acc_df.plot(column=metric,ax=ax,cmap='plasma',zorder=1,norm=norm,label=f'{metric}',legend=True,missing_kwds={
                     "color": "lightgrey",
                     #"edgecolor": "red",
                     "hatch": "xxxxxxxxx",
@@ -1002,7 +1003,7 @@ class CompareCorrect(myLogger):
                 fig_name='pos-score_'+fig_name
             if type(self.modeldict['cross_validate']) is dict:
                 fig_name='cv_'+fig_name
-
+            fig.tight_layout()
             plt.show()
             fig.savefig(os.path.join(self.results_folder,'print',fig_name))
                 

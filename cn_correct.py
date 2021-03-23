@@ -1112,7 +1112,7 @@ class MultiCorrectionTool(myLogger):
                 #cc.runBigModel()
                 print(cc.modeldict['results_folder'])
                 cc.plotGeoTestData(plot_negative=False)
-                #cc.plotGeoTestData(plot_negative=True) 
+                cc.plotGeoTestData(plot_negative=True) 
         with open(name,'wb') as f:
             pickle.dump(self.corrections,f)
             

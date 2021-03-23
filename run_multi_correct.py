@@ -94,8 +94,8 @@ if __name__=='__main__':
 
 
         
-    mct=MCT(model_specs=model_spec_list,plot=False)
-    #mct.runCorrections()
+    mct=MCT(model_specs=model_spec_list,plot=True)
+    mct.runCorrections()
     mct.buildCorrectionResultsDF()
     mct.selectCorrections()
     mct.setCorrectionSelectionAccuracy()

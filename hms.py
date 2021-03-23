@@ -50,7 +50,7 @@ class HMS:
             self.geometry["geometryMetadata"] = metadata
 
     def get_request_body(self):
-        if any((self.dataset, self.source, self.start_date, self.end_date, self.geometry, self.module)) is None:
+        if any(p != None for p in (self.dataset, self.source, self.start_date, self.end_date, self.geometry, self.module)):
             logger.info("Missing required parameters, unable to create request.")
             return None
         request_body = {

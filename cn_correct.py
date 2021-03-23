@@ -1684,7 +1684,10 @@ class MultiCorrectionTool(myLogger):
             if i==0:
                 ax.set_ylim(bottom=-1,top=1)
             else:
-                ax.set_ylim(bottom=0,top=1)
+                if min(vals)<0:
+                    ax.set_ylim(bottom=-1,top=1)
+                else:
+                    ax.set_ylim(bottom=0,top=1)
             ax.set_xticks(scale_xticks)
             
             ax.xaxis.set_major_formatter(ticker.NullFormatter())
@@ -1788,7 +1791,7 @@ class MultiCorrectionTool(myLogger):
         plt.rcParams['axes.facecolor'] = 'lightgrey'
         fig=plt.figure(dpi=300,figsize=[9,3.7])
         fig.patch.set_facecolor('w')
-        fig.suptitle(f'Best Correctedd Model Out Of Sample Average Validation Scores')
+        fig.suptitle(f'Best Correction Model Out Of Sample Average Validation Scores')
         for i,metric in enumerate(best_model_df.columns.to_list()):
             ax=fig.add_subplot(1,2,i+1)
             ax.set_title(f'{metric.upper()}')

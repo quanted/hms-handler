@@ -6,6 +6,7 @@ import re
 import os
 import logging
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.colors import TwoSlopeNorm,Normalize
 import matplotlib.ticker as ticker
 from mpl_toolkits.axes_grid.parasite_axes import SubplotHost
@@ -1111,7 +1112,7 @@ class MultiCorrectionTool(myLogger):
                 #cc.runBigModel()
                 print(cc.modeldict['results_folder'])
                 cc.plotGeoTestData(plot_negative=False)
-                cc.plotGeoTestData(plot_negative=True) 
+                #cc.plotGeoTestData(plot_negative=True) 
         with open(name,'wb') as f:
             pickle.dump(self.corrections,f)
             
@@ -1661,10 +1662,16 @@ class MultiCorrectionTool(myLogger):
             ax.set_title(f'{metric.upper()}')
             ax.vlines(scale_xticks,-1,1,color='w',alpha=0.5)
             for ii,(m_name,ser) in enumerate(m_ser_dict.items()):
-                ax.scatter(g_ID,ser[metric].to_list(),color=colors[ii],alpha=0.7,label='_'+m_name,s=2)
-                ax.plot(g_ID,ser[metric].to_list(),'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1)
-            if i>0:ax.legend()
-            ax.set_ylim(bottom=-0.2,top=1)
+                val_arr=ser[metric]
+                val_arr[val_arr<-1]=-1
+                vals=val_arr.to_list()
+                ax.scatter(g_ID,vals,color=colors[ii],alpha=0.6,label='_'+m_name,s=1.5)
+                ax.plot(g_ID,vals,'o-',color=colors[ii],alpha=0.7,label=m_name,linewidth=1.3)
+            if i==0:ax.legend()
+            if i==0:
+                ax.set_ylim(bottom=-1,top=1)
+            else:
+                ax.set_ylim(bottom=0,top=1)
             ax.set_xticks(scale_xticks)
             
             ax.xaxis.set_major_formatter(ticker.NullFormatter())
@@ -1809,6 +1816,18 @@ class MultiCorrectionTool(myLogger):
             ax.set_xticks([])
             ax.set_yticklabels([])
             ax.set_yticks([])
+            if i==0:
+                handles, labels = ax.get_legend_handles_labels()
+                handles=[
+                    *handles,
+                    mpatches.Patch(
+                        hatch='xxxxxxxxx',facecolor='lightgrey',
+                        label='missing value'),
+                    mpatches.Patch(
+                        hatch='oooooo',facecolor='lightgrey', 
+                        label='negative score'),
+                ]
+                ax.legend(handles=handles,fontsize=6,bbox_to_anchor=(0.25,0.15))
         fig_name=f'{self.model_scale}_hybrid-select_combined.tif'
         if not plot_negative:
             fig_name='pos-score_'+fig_name
@@ -1816,6 +1835,7 @@ class MultiCorrectionTool(myLogger):
             #ax.add_artist(negleg)
         fig_name='cv_'+cmap+fig_name
         fig.tight_layout()
+        #plt.legend()
         plt.show()
         fig.savefig(os.path.join(self.mct_results_folder,fig_name))   
     

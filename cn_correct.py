@@ -929,12 +929,12 @@ class CompareCorrect(myLogger):
         self.dc_val_dict=data_dict
     
     def getFancyMName(self,mname):
-        name_part_list=re.split('-')
+        name_part_list=re.split('-',mname)
         if name_part_list[0].lower()=='lin_reg':
             poly_deg=name_part_list[1]
-            if poly_deg<7:
-                ordinal_dict={1:'First',2:'Second',3:'Third',4:'Fourth',5:'Fifth',
-                             6:'Sixth'}
+            if int(poly_deg)<7:
+                ordinal_dict={'1':'First','2':'Second','3':'Third','4':'Fourth','5':'Fifth',
+                             '6':'Sixth'}
                 poly_ordinal=ordinal_dict[poly_deg]
             else:
                 poly_ordinal=f'poly_deg{th}'

@@ -100,15 +100,15 @@ if __name__=='__main__':
     mct.selectCorrections()
     mct.setCorrectionSelectionAccuracy()
     mct.setSortOrder()   
-    """mct.plotCorrectionRunoffComparison()
-    mct.plotCorrectionRunoffComparison(split_zero=False)
+    #mct.plotCorrectionRunoffComparison()
+    #mct.plotCorrectionRunoffComparison(split_zero=False)
     mct.plotCorrectionRunoffComparison(sort=True)
     #mct.plotCorrectionRunoffComparison(time_range=slice(-365,None))
     mct.plotCorrectionRunoffComparison(split_zero=False,time_range=slice(-365,None))
     #mct.plotCorrectionRunoffComparison(sort=True,time_range=slice(-365,None))
     #mct.plotCorrectionRunoffComparison(sort=True,time_range=slice(-365,None),split_zero=False)
     mct.saveCorrectionSelectionTable() 
-    mct.plotCorrectionResultLines()"""
+    mct.plotCorrectionResultLines()
     mct.plotGeogHybridAccuracy(plot_negative=False)
             
     """{'stackingregressor':{

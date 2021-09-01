@@ -1424,6 +1424,7 @@ class MultiCorrectionTool(myLogger):
         else:
             fig.text(0.5, 0.95, 'Test Data', ha='center', va='center')
         fig.text(0.95, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
+        fig.text(0.5,0.05,'Time (days)',ha='center',va='center',fontsize=12)
         
         
         if sort or name[-4:]=='zero':

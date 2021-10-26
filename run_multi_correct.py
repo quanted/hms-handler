@@ -64,7 +64,7 @@ if __name__=='__main__':
             'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
             'max_poly_deg':i,'poly_search':False,
             'fit_intercept':False,'alphas':l2_alphas
-            } for i in range(max_deg,max_deg+1)},
+            } for i in range(1,max_deg+1)},
 
         {f'lin_reg-{i}':{
             'max_poly_deg':i,

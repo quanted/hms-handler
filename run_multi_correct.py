@@ -64,7 +64,7 @@ if __name__=='__main__':
             'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
             'max_poly_deg':i,'poly_search':False,
             'fit_intercept':False,'alphas':l2_alphas
-            } for i in range(max_deg,max_deg+1)},
+            } for i in range(1,max_deg+1)},
 
         {f'lin_reg-{i}':{
             'max_poly_deg':i,
@@ -100,7 +100,7 @@ if __name__=='__main__':
     mct.selectCorrections()
     mct.setCorrectionSelectionAccuracy()
     mct.setSortOrder()   
-    """mct.plotCorrectionRunoffComparison()
+    mct.plotCorrectionRunoffComparison()
     mct.plotCorrectionRunoffComparison(split_zero=False)
     mct.plotCorrectionRunoffComparison(sort=True)
     #mct.plotCorrectionRunoffComparison(time_range=slice(-365,None))
@@ -108,7 +108,7 @@ if __name__=='__main__':
     #mct.plotCorrectionRunoffComparison(sort=True,time_range=slice(-365,None))
     #mct.plotCorrectionRunoffComparison(sort=True,time_range=slice(-365,None),split_zero=False)
     mct.saveCorrectionSelectionTable() 
-    mct.plotCorrectionResultLines()"""
+    mct.plotCorrectionResultLines()
     mct.plotGeogHybridAccuracy(plot_negative=False)
             
     """{'stackingregressor':{

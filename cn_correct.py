@@ -928,6 +928,22 @@ class CompareCorrect(myLogger):
                         data_dict[m_name][geog].append(self.comid_geog_dict[obj.comid][geog])
         self.dc_val_dict=data_dict
     
+    def getFancyMName(self,mname):
+        name_part_list=re.split('-',mname)
+        if name_part_list[0].lower()=='lin_reg':
+            poly_deg=name_part_list[1]
+            if int(poly_deg)<7:
+                ordinal_dict={'1':'First','2':'Second','3':'Third','4':'Fourth','5':'Fifth',
+                             '6':'Sixth'}
+                poly_ordinal=ordinal_dict[poly_deg]
+            else:
+                poly_ordinal=f'poly_deg{th}'
+            fancy_name=f'{poly_ordinal} Order OLS Regression'
+        else:
+            fancy_name=mname
+            
+        return fancy_name
+    
     def plotGeoTestData(self,plot_negative=True,use_val_data=True):
         try: self.eco_geog
         except: self.setEcoGeog()
@@ -945,10 +961,11 @@ class CompareCorrect(myLogger):
             plt.rcParams['axes.facecolor'] = 'lightgrey'
             fig=plt.figure(dpi=300,figsize=[9,3.7])
             fig.patch.set_facecolor('w')
+            fancy_m_name=self.getFancyMName(m_name)
             if use_val_data:
-                fig.suptitle(f'Validation Scores for {m_name.upper()}')
+                fig.suptitle(f'Validation Scores for {fancy_m_name}')
             else:
-                fig.suptitle(f'Test Scores for {m_name.upper()}')
+                fig.suptitle(f'Test Scores for {fancy_m_name}')
             for i,metric in enumerate(['nse','pearson']):
                 
                 
@@ -1400,13 +1417,19 @@ class MultiCorrectionTool(myLogger):
             else:assert False,f'unexpected time_range:{time_range}'
         else:
             assert time_range is None or type(time_range) in [list,slice,np.ndarray],f'unexpected type for time_range:{type(time_range)}'
-        fig=plt.figure(dpi=300,figsize=[10,11])#16,12
+        fig=plt.figure(dpi=200,figsize=[10,11])#16,12
         if use_val_data:
+            labeltext='Validation Data'
+            if not time_range is None:
+                if type(time_range) is str:
+                    labeltext+=' {time_range}'
+                #else: assert False, f'unexpected type for time_range: {type(time_range)}'
             
-            fig.text(0.5, 0.95, 'Validation Data', ha='center', va='center')
-        else:
+            fig.text(0.5, 0.95,labeltext , ha='center', va='center')
+        elif time_range is None:
             fig.text(0.5, 0.95, 'Test Data', ha='center', va='center')
         fig.text(0.95, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
+        fig.text(0.5,0.05,'Time (days)',ha='center',va='center',fontsize=12)
         
         
         if sort or name[-4:]=='zero':

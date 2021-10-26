@@ -1417,11 +1417,16 @@ class MultiCorrectionTool(myLogger):
             else:assert False,f'unexpected time_range:{time_range}'
         else:
             assert time_range is None or type(time_range) in [list,slice,np.ndarray],f'unexpected type for time_range:{type(time_range)}'
-        fig=plt.figure(dpi=300,figsize=[10,11])#16,12
+        fig=plt.figure(dpi=200,figsize=[10,11])#16,12
         if use_val_data:
+            labeltext='Validation Data'
+            if not time_range is None:
+                if type(time_range) is str:
+                    labeltext+=' {time_range}'
+                #else: assert False, f'unexpected type for time_range: {type(time_range)}'
             
-            fig.text(0.5, 0.95, 'Validation Data', ha='center', va='center')
-        else:
+            fig.text(0.5, 0.95,labeltext , ha='center', va='center')
+        elif time_range is None:
             fig.text(0.5, 0.95, 'Test Data', ha='center', va='center')
         fig.text(0.95, 0.5, 'Natural Logarithm of 1 + Runoff', ha='center', va='center', rotation='vertical',fontsize=12)
         fig.text(0.5,0.05,'Time (days)',ha='center',va='center',fontsize=12)

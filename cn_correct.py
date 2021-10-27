@@ -1345,6 +1345,7 @@ class MultiCorrectionTool(myLogger):
                                     } #concatenating cv yhats for each comid 
                         except ValueError: 
                             print(f'ValueError for comid:{obj.comid}')
+                            self.logger.exception(f'ValueError for comid:{obj.comid}')
                         except:
                             print(f'comid:{obj.comid}',format_exc())
             #average over comids in each model_geog

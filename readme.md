@@ -1,4 +1,4 @@
-# [NDVI-CN](https://www.sciencedirect.com/science/article/pii/S1364815222000275)
+# [Catchment scale runoff time-series generation and validation using statistical models for the Continental United States](https://www.sciencedirect.com/science/article/pii/S1364815222000275)
 ## Authors: Patton, Douglas; Smith, Deron; Muche, Muluken; Wolfe, Kurt; Parmar, Rajbir; Johnston, John M. 
 ### Affiliations: Oakridge Institute of Science and Education; EPA/ORD/CEMM/EPD/LASMB; National Science Foundation 
 

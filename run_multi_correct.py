@@ -6,46 +6,7 @@ import numpy as np
 
 if __name__=='__main__':
     filterwarnings('ignore')
-    """max_deg=5
-    l1_list=np.linspace(1,9,10)**2#for elastic-net
-    l1_list=list(1-l1_list/(max(l1_list)+1))
-    l2_alphas=list(np.logspace(-5,1.4,50))# for ridge
-    model_spec_list=[
-        {f'lasso-{i}':{
-            'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
-            'max_poly_deg':i,'poly_search':False,
-            'fit_intercept':False,'n_alphas':50
-            } for i in range(1,max_deg+1)},
-
-        {f'ridge-{i}':{
-            'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
-            'max_poly_deg':i,'poly_search':False,
-            'fit_intercept':False,'alphas':l2_alphas
-            } for i in range(1,max_deg+1)},
-
-        {f'lin_reg-{i}':{
-            'max_poly_deg':i,
-            'poly_search':False,
-            'fit_intercept':False
-            } for i in range(1,max_deg+1)},
-
-        {f'elastic_net-{i}':{
-            'n_alpha':10,
-            'l1_ratio':l1_list,#list(1-np.logspace(-2,-.03,7)),
-            'inner_cv':{'n_repeats':2,'n_splits':10,'n_jobs':1},
-            'max_poly_deg':i,'poly_search':False,'fit_intercept':False
-            } for i in range(1,max_deg+1)},
-
-        {f'gbr-{c}_{l}_{s}_{d}':{
-            'kwargs':{
-                'ccp_alpha':c,'learning_rate':l,
-                'subsample':s,'max_depth':d
-                }
-            } for c in [0,0.05] for l in [0.025,.1] for s in [1,0.7] for d in [2,3]
-        }
-    ]"""
-
-   
+    
     max_deg=5
     l1_list=np.linspace(1,9,10)**2#for elastic-net
     l1_list=list(1-l1_list/(max(l1_list)+1))
